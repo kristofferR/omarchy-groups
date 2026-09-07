@@ -539,6 +539,65 @@ BarWidget {
   onCellsChanged: Qt.callLater(claimChevronClicks)
   onRevealedChanged: if (revealed) Qt.callLater(claimChevronClicks)
 
+  readonly property bool canShowGroupTitle: pointerInside && expanded
+    && openChildCount === 0 && !draggingChild
+  property bool groupTitleReady: false
+  onCanShowGroupTitleChanged: {
+    groupTitleReady = false
+    if (canShowGroupTitle) groupTitleTimer.restart()
+    else groupTitleTimer.stop()
+  }
+
+  Timer {
+    id: groupTitleTimer
+    interval: 400
+    onTriggered: root.groupTitleReady = true
+  }
+
+  // Anchor the hover title to the drawer, keeping its icons unobstructed.
+  PopupWindow {
+    id: groupTitle
+    visible: root.canShowGroupTitle && root.groupTitleReady && strip.visible
+    color: "transparent"
+    implicitWidth: Math.ceil(groupTitleBubble.implicitWidth)
+    implicitHeight: Math.ceil(groupTitleBubble.implicitHeight)
+    mask: Region {}
+
+    anchor {
+      window: strip
+      adjustment: PopupAdjustment.Slide
+      edges: Edges.Top | Edges.Left
+      gravity: Edges.Bottom | Edges.Right
+      rect.width: 1
+      rect.height: 1
+      rect.x: Math.round(cardArea.x + (root.vertical
+        ? (root.barPosition === "right" ? -groupTitle.width - 6 : cardArea.width + 6)
+        : (cardArea.width - groupTitle.width) / 2))
+      rect.y: Math.round(cardArea.y + (root.vertical
+        ? (cardArea.height - groupTitle.height) / 2
+        : (root.barPosition === "bottom" ? -groupTitle.height - 6 : cardArea.height + 6)))
+    }
+
+    BorderSurface {
+      id: groupTitleBubble
+      implicitWidth: groupTitleLabel.implicitWidth + 20
+      implicitHeight: groupTitleLabel.implicitHeight + 14
+      color: Color.tooltip.background
+      borderSpec: Border.surfaceSpec("tooltip", "border", Color.tooltip.border, 1)
+      radius: Style.cornerRadius
+
+      Text {
+        id: groupTitleLabel
+        anchors.centerIn: parent
+        textFormat: Text.PlainText
+        text: root.groupLabel + " · " + root.entries.length + " plugins"
+        color: Color.tooltip.text
+        font.family: root.bar ? root.bar.fontFamily : Style.font.family
+        font.pixelSize: Style.font.body
+      }
+    }
+  }
+
   WidgetButton {
     id: chevron
     anchors.fill: parent

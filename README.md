@@ -6,7 +6,7 @@ The existing widget hosting, panel anchoring, scrolling and drag handling come
 from Nook. The MIT license and upstream history are preserved.
 
 Each group has a boxed icon, a configured name, and a unique `groupId`. Hover-open
-groups suppress the button tooltip so it cannot cover the drawer. Opening a
+groups show their hover title below the drawer so it cannot cover the icons. Opening a
 group closes the previous group and its open child panel. The bar stays one row:
 opening a drawer does not move any bar icons. Hover opens the drawer; click pins
 it; click again closes it. Clicking outside, including empty bar space, dismisses
