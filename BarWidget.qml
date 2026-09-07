@@ -177,6 +177,10 @@ BarWidget {
   implicitWidth: chevron.implicitWidth
   implicitHeight: chevron.implicitHeight
 
+  function closeIfNoChildrenOpen() {
+    if (openChildCount === 0) close()
+  }
+
   function noteChildOpen(wasOpen, isOpen) {
     if (wasOpen === isOpen) return
     openChildCount = Math.max(0, openChildCount + (isOpen ? 1 : -1))
@@ -1222,8 +1226,10 @@ BarWidget {
     property bool childOpen: childItem && childItem.opened === true
     onChildOpenChanged: {
       root.noteChildOpen(!childOpen, childOpen)
-      // A child dismissed by an outside click must not leave a pinned drawer.
-      if (!childOpen && root.openChildCount === 0) root.close()
+      // A popup handoff closes the old child before the new child's opened
+      // binding has settled. Closing synchronously can close that new child
+      // inside its own binding evaluation and strand its input surface.
+      if (!childOpen) Qt.callLater(root.closeIfNoChildrenOpen)
     }
 
     Loader {
