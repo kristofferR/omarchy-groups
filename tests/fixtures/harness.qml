@@ -1,5 +1,6 @@
 import QtQuick
 import Quickshell
+import qs.Ui
 
 // Loads the real BarWidget.qml against a mock bar and shell and drives the two
 // reconcile timers: the stranded-settings reclaim and the uninstalled-plugin
@@ -138,6 +139,15 @@ ShellRoot {
     property bool useTransparentForeground: false
     property color urgent: "#ff5555"
     property bool foregroundAnimationEnabled: false
+    property var activePopout: null
+    function requestPopout(owner) {
+      if (activePopout === owner) return
+      if (activePopout) activePopout.close()
+      activePopout = owner
+    }
+    function releasePopout(owner) {
+      if (activePopout === owner) activePopout = null
+    }
     property var moduleSlots: []
     property var barDragSource: null
     property var barDragWindow: null
@@ -150,6 +160,22 @@ ShellRoot {
     function unregisterClickTarget(_target) {}
     function showTooltip(_target, _text) {}
     function hideTooltip(_target) {}
+  }
+
+  Component {
+    id: popupProbe
+    Panel {
+      id: probe
+      implicitWidth: 24
+      implicitHeight: 24
+      // Mirrors KeyboardPanel's binding-driven popout handoff without mapping
+      // an input surface on the user's desktop.
+      property bool popupOpen: opened
+      onPopupOpenChanged: {
+        if (popupOpen) mockBar.requestPopout(probe)
+        else mockBar.releasePopout(probe)
+      }
+    }
   }
 
   Item { id: host }
@@ -304,6 +330,40 @@ ShellRoot {
       if (!secondWidget.hoverHeld) return fail("leaving and returning did not restore hover")
       secondWidget.pointerInside = false
       secondWidget.close()
+      mockRegistry.installedPlugins = {
+        "w.first": {kinds: ["bar-widget"]},
+        "w.second": {kinds: ["bar-widget"]}
+      }
+      mockWidgetRegistry.widgets = {
+        "w.first": {component: popupProbe},
+        "w.second": {component: popupProbe}
+      }
+      widget.settings = {groupId: "first", trigger: "click", items: ["w.first", "w.second"]}
+      next()
+    } else if (stage === 3) {
+      if (widget.cells.length !== 2 || !widget.cells[0].childItem || !widget.cells[1].childItem) return
+      widget.cells[0].childItem.open()
+      if (widget.openChildCount !== 1) return fail("first popup did not hold drawer open")
+      widget.cells[1].childItem.open()
+      next()
+    } else if (stage === 4) {
+      var first = widget.cells[0].childItem
+      var second = widget.cells[1].childItem
+      if (first.opened || !second.opened || !second.controller.open || !second.popupOpen)
+        return fail("popup handoff corrupted child open state")
+      if (widget.openChildCount !== 1 || !widget.expanded || mockBar.activePopout !== second)
+        return fail("popup handoff lost drawer or popout ownership")
+      second.close()
+      next()
+    } else if (stage === 5) {
+      if (widget.expanded || widget.openChildCount !== 0 || mockBar.activePopout !== null)
+        return fail("last popup dismissal did not release drawer")
+      widget.cells[1].childItem.open()
+      widget.close()
+      next()
+    } else if (stage === 6) {
+      if (widget.expanded || widget.cells[1].childItem.opened || mockBar.activePopout !== null)
+        return fail("explicit group close did not dismiss child")
       pass()
     }
   }
