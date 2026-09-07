@@ -11,6 +11,7 @@ function load(name, imports = {}) {
 }
 const Icons = load('GroupIcons.js', {Lucide: load('LucideIcons.js')})
 assert(Icons.names.length > 1800)
+assert.deepEqual(Array.from(Icons.names.slice(0, 9)), ['windows', 'development', 'input', 'sound', 'devices', 'display', 'appearance', 'maintenance', 'group'])
 assert.equal(Icons.search(' ROCKET ')[0], 'rocket')
 assert(Icons.search('wireless').includes('wifi'))
 assert.equal(Icons.search('no-such-icon-zzzz').length, 0)

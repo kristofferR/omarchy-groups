@@ -19,8 +19,23 @@ Item {
   property string message: ""
   property bool choosingIcon: false
   readonly property var iconNames: GroupIcons.names
+  readonly property bool scopedHost: shell && !("shellConfig" in shell)
+  property var diskConfig: null
+  FileView {
+    id: configFile
+    path: Quickshell.env("HOME") + "/.config/omarchy/shell.json"
+    watchChanges: root.scopedHost
+    blockAllReads: true
+    atomicWrites: true
+    onFileChanged: reload()
+    onLoaded: {
+      try { root.diskConfig = JSON.parse(text()) }
+      catch (error) { root.diskConfig = null }
+    }
+  }
   readonly property var groups: {
-    var layout = shell && shell.shellConfig && shell.shellConfig.bar ? shell.shellConfig.bar.layout : null
+    var config = scopedHost ? diskConfig : (shell ? shell.shellConfig : null)
+    var layout = config && config.bar ? config.bar.layout : null
     var result = []
     if (!layout) return result
     Layout.SECTIONS.forEach(function(section) {
@@ -52,6 +67,21 @@ Item {
   function close() { opened = false }
   function toggle() { if (opened) close(); else open("") }
   function mutate(change) {
+    // New scoped shell APIs omit whole-config mutation. Groups also manages
+    // hosted plugin enablement, so edit the user-owned config atomically.
+    if (scopedHost) {
+      try {
+        configFile.reload()
+        var config = JSON.parse(configFile.text())
+        if (!config.bar || !config.bar.layout) return false
+        var changed = change(config)
+        if (changed) {
+          configFile.setText(JSON.stringify(config, null, 2) + "\n")
+          diskConfig = config
+        }
+        return changed
+      } catch (error) { return false }
+    }
     if (!shell || typeof shell.mutateShellConfig !== "function") return false
     var result = false
     shell.mutateShellConfig(function(config) {
@@ -99,6 +129,28 @@ Item {
     textFormat: Text.PlainText
   }
 
+  component IconChoice: Button {
+    required property string iconName
+    width: Style.space(50)
+    height: width
+    bordered: true
+    focusable: true
+    selected: root.chosenIcon === iconName
+    tooltipText: iconName.replace(/-/g, " ")
+    onClicked: {
+      root.chosenIcon = iconName
+      root.choosingIcon = false
+      content.forceActiveFocus()
+    }
+    Image {
+      anchors.centerIn: parent
+      width: Style.space(24); height: width
+      source: GroupIcons.source(iconName, String(Color.menu.text))
+      sourceSize.width: width * (window.screen ? window.screen.devicePixelRatio : 1)
+      sourceSize.height: height * (window.screen ? window.screen.devicePixelRatio : 1)
+    }
+  }
+
   PanelWindow {
     id: window
     visible: root.opened
@@ -134,7 +186,7 @@ Item {
             width: Style.space(36); height: width
             source: GroupIcons.source("manager", String(Color.accent))
             sourceSize.width: width * (window.screen ? window.screen.devicePixelRatio : 1)
-            sourceSize.height: sourceSize.width
+            sourceSize.height: height * (window.screen ? window.screen.devicePixelRatio : 1)
           }
           Column {
             Label { text: "Groups"; font.pixelSize: Style.font.title; font.bold: true }
@@ -177,7 +229,7 @@ Item {
                       width: Style.space(20); height: width
                       source: GroupIcons.source(modelData.icon, String(Color.menu.text))
                       sourceSize.width: width * (window.screen ? window.screen.devicePixelRatio : 1)
-                      sourceSize.height: sourceSize.width
+                      sourceSize.height: height * (window.screen ? window.screen.devicePixelRatio : 1)
                     }
                     Column {
                       anchors.left: groupIcon.right; anchors.leftMargin: Style.space(10)
@@ -230,7 +282,7 @@ Item {
                   width: Style.space(22); height: width
                   source: GroupIcons.source(root.chosenIcon, String(Color.menu.text))
                   sourceSize.width: width * (window.screen ? window.screen.devicePixelRatio : 1)
-                  sourceSize.height: sourceSize.width
+                  sourceSize.height: height * (window.screen ? window.screen.devicePixelRatio : 1)
                 }
               }
               Row {
@@ -281,8 +333,22 @@ Item {
           placeholderText: "Search " + root.iconNames.length + " icons by name or keyword"
           foreground: Color.menu.text
         }
+        Column {
+          width: parent.width
+          spacing: Style.space(8)
+          visible: iconSearch.text.trim() === ""
+          Label { text: "Original icons"; opacity: 0.65; font.pixelSize: Style.font.caption }
+          Flow {
+            width: parent.width
+            spacing: Style.space(6)
+            Repeater {
+              model: GroupIcons.originalNames
+              IconChoice { required property string modelData; iconName: modelData }
+            }
+          }
+        }
         Label {
-          text: iconGrid.count + " icons · current: " + root.chosenIcon.replace(/-/g, " ")
+          text: iconGrid.count + (iconSearch.text.trim() === "" ? " more icons · current: " : " matches · current: ") + root.chosenIcon.replace(/-/g, " ")
           opacity: 0.65
           font.pixelSize: Style.font.caption
         }
@@ -295,28 +361,15 @@ Item {
           clip: true
           boundsBehavior: Flickable.StopAtBounds
           QQC.ScrollBar.vertical: QQC.ScrollBar {}
-          model: GroupIcons.search(iconSearch.text)
+          model: iconSearch.text.trim() === ""
+            ? root.iconNames.filter(function(name) { return GroupIcons.originalNames.indexOf(name) === -1 })
+            : GroupIcons.search(iconSearch.text)
           onModelChanged: positionViewAtBeginning()
-          delegate: Button {
+          delegate: IconChoice {
             required property string modelData
+            iconName: modelData
             width: iconGrid.cellWidth - Style.space(6)
             height: iconGrid.cellHeight - Style.space(6)
-            bordered: true
-            focusable: true
-            selected: root.chosenIcon === modelData
-            tooltipText: modelData.replace(/-/g, " ")
-            onClicked: {
-              root.chosenIcon = modelData
-              root.choosingIcon = false
-              content.forceActiveFocus()
-            }
-            Image {
-              anchors.centerIn: parent
-              width: Style.space(24); height: width
-              source: GroupIcons.source(modelData, String(Color.menu.text))
-              sourceSize.width: width * (window.screen ? window.screen.devicePixelRatio : 1)
-              sourceSize.height: sourceSize.width
-            }
           }
           Label { anchors.centerIn: parent; visible: iconGrid.count === 0; text: "No icons match this search."; opacity: 0.65 }
         }

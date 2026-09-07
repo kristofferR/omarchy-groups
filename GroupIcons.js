@@ -15,7 +15,8 @@ var paths = {
   "group": "<rect x=\"3\" y=\"3\" width=\"7\" height=\"7\" rx=\"1\"/><rect x=\"14\" y=\"3\" width=\"7\" height=\"7\" rx=\"1\"/><rect x=\"3\" y=\"14\" width=\"7\" height=\"7\" rx=\"1\"/><rect x=\"14\" y=\"14\" width=\"7\" height=\"7\" rx=\"1\"/>"
 }
 
-var names = Object.keys(paths).filter(function(name) { return name !== "manager" })
+var originalNames = ["windows", "development", "input", "sound", "devices", "display", "appearance", "maintenance", "group"]
+var names = originalNames
   .concat(Object.keys(Lucide.paths).filter(function(name) { return !paths[name] }).sort())
 
 function search(query) {

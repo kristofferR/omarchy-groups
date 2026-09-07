@@ -40,7 +40,7 @@ Drag an existing bar icon onto the new group to get started. Use **Add group** i
 }
 ```
 
-The settings panel creates unique group IDs automatically. For hand-written entries, every group needs a unique, stable `groupId`. The searchable picker includes 1,821 choices: the original group icons plus the bundled Lucide catalog. Search by name or keyword, such as `bluetooth`, `music`, or `rocket`. Icons work offline, and existing icon names stay compatible.
+The settings panel creates unique group IDs automatically. For hand-written entries, every group needs a unique, stable `groupId`. The searchable picker includes 1,821 choices: the original group icons plus the bundled Lucide catalog. The original nine icons stay in a separate row at the top while browsing. Search by name or keyword, such as `bluetooth`, `music`, or `rocket`. Icons work offline, and existing icon names stay compatible.
 
 ![Searchable icon picker](assets/icon-picker.png)
 
