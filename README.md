@@ -1,32 +1,32 @@
 # Groups for Omarchy
 
-Independent, named icon groups that open directly below the bar. A fork of
-[Katsari/Nook](https://github.com/Katsari/nook), based on version 1.1.2.
-The existing widget hosting, panel anchoring, scrolling and drag handling come
-from Nook. The MIT license and upstream history are preserved.
+Organize your Omarchy bar into independent icon groups. Drawers open below the bar, so your other icons stay in place. Drag widgets into groups, back onto the bar, or directly between groups.
 
-Each group has a boxed icon, a configured name, and a unique `groupId`. Hover-open
-groups show their hover title below the drawer so it cannot cover the icons. Opening a
-group closes the previous group and its open child panel. The bar stays one row:
-opening a drawer does not move any bar icons. Hover opens the drawer; click pins
-it; click again closes it. Clicking outside, including empty bar space, dismisses
-the group. A child's panel keeps its drawer open while in use; dismissing that
-panel closes its group too. Widgets of different heights are centered in the drawer.
-Reveal animation is off by default.
+![Groups settings](preview.png)
 
-## Local development and installation
+## Highlights
+
+- **Independent groups.** Give each drawer a name, icon, and stable identity. Place groups on the left, center, or right.
+- **A steady bar.** Drawers open below the bar without pushing other icons around.
+- **Drag and drop.** Move widgets between the bar and groups, reorder inside a drawer, or transfer directly between groups. Widget settings stay with the icon.
+- **Native interactions.** Hosted plugins keep their hover tooltips, right-click actions, scrolling, and popup panels.
+- **Hover or click.** Hover opens a drawer; click pins it. Click again or outside to dismiss.
+- **Built for Omarchy.** Uses the shell's active theme and existing plugin widgets, with no extra background service.
+
+## Requirements
+
+- Omarchy Quattro with the native shell plugin system
+- The standard Omarchy bar
+
+The underlying Quickshell and Hyprland support ships with Omarchy. The top bar is the supported and verified configuration.
+
+## Install
 
 ```sh
-bash tests/all.sh
-./install-local.sh
+omarchy plugin add https://github.com/kristofferR/omarchy-groups.git --enable
 ```
 
-The installer validates and copies the runtime files into
-`~/.config/omarchy/plugins/kristofferr.groups`, then restarts the shell once to clear cached hosted QML components. It does not
-change the layout. Edit this checkout and rerun the installer to deploy changes;
-the installed copy is deliberately not managed by upstream plugin updates.
-
-Add any number of entries to `bar.layout.left`, `center`, or `right`:
+Drag an existing bar icon onto the new group to get started. To create several groups, add entries to `bar.layout.left`, `center`, or `right` in `~/.config/omarchy/shell.json`:
 
 ```json
 {
@@ -36,43 +36,63 @@ Add any number of entries to `bar.layout.left`, `center`, or `right`:
   "icon": "devices",
   "trigger": "hover",
   "duration": 0,
-  "items": [
-    { "id": "omarchy.bluetooth" },
-    { "id": "omarchy.tailscale" }
-  ]
+  "items": []
 }
 ```
 
-Also keep hosted plugins enabled through top-level `plugins` entries, for example
-`{"id":"omarchy.bluetooth"}`. Preserve existing service settings on those entries.
-The drawer's absorb/eject commands manage enablement automatically. Per-widget
-layout settings stay with the widget when it moves.
+Every group needs a unique, stable `groupId`. Available icons are `windows`, `development`, `input`, `sound`, `devices`, `display`, `appearance`, `maintenance`, and `group`.
 
-Icon names: `windows`, `development`, `input`, `sound`, `devices`, `display`,
-`appearance`, `maintenance`, or `group`. SVGs use a fixed viewbox and centered
-14-pixel image in a 28-pixel slot so glyph bearings cannot shift them within their buttons.
+Start with empty groups and drag widgets into them. Dragging manages plugin enablement and preserves settings automatically. When configuring `items` by hand, keep the hosted plugins enabled through the top-level `plugins` array, preserving any existing service settings.
 
-Every group needs a unique, stable `groupId`. Missing or duplicate IDs will never
-silently redirect config edits into a sibling. An unnamed single group remains
-supported, but named groups are required for multiple instances. Configure group
-entries directly in `shell.json`: the stock settings editor searches by plugin
-ID, so it cannot reliably distinguish multiple instances of any plugin.
+### Update
+
+```sh
+omarchy plugin update kristofferr.groups --yes
+```
+
+### Remove
+
+Drag the icons you want to keep back onto the bar first, then:
+
+```sh
+omarchy plugin remove kristofferr.groups --yes
+```
+
+## Controls
+
+| Action | Result |
+| --- | --- |
+| Hover a group | Open its drawer |
+| Click a group | Pin it open; click again to close |
+| Click outside | Dismiss the drawer |
+| Right-click a group | Open Groups settings |
+| Drag a bar icon onto a group | Move it into the drawer |
+| Drag within a drawer | Reorder icons |
+| Drag to another group | Transfer the widget and its settings |
+| Drag to a position on the bar | Place the widget there |
+| Drop outside the bar and drawers | Cancel the move |
+
+Opening another group closes the previous drawer and its child panel. A widget's own panel keeps its group open while in use. Nested groups are not supported.
 
 ## Settings
 
-Right-click any group to open the shared Groups settings panel. It shows the
-current names, icons, positions, and item counts. Group editing will be added
-here later. Escape, Done, or a click outside closes it.
+Right-click any group to open the shared settings panel. It currently shows group names, icons, bar positions, and item counts. Adding and removing groups and editing names and icons in the panel are planned; for now, edit those values in `shell.json`.
 
-An optional dedicated bar shortcut uses
-`{"id":"kristofferr.groups","groupId":"settings","role":"manager"}`.
-It opens settings instead of a drawer and is excluded from group membership.
-The plugin also provides its own icon through the manifest.
+An optional dedicated settings icon uses this bar entry:
 
-Open the same panel from a command with
-`omarchy-shell shell summon kristofferr.groups`.
+```json
+{"id": "kristofferr.groups", "groupId": "settings", "role": "manager", "label": "Groups settings"}
+```
 
-## Controls
+Open the same panel from the terminal:
+
+```sh
+omarchy-shell shell summon kristofferr.groups
+```
+
+Escape, Done, or clicking outside closes settings. Avoid the stock per-widget settings editor for multiple instances: it looks up widgets by plugin ID and cannot reliably distinguish individual groups.
+
+Groups also expose independent IPC controls:
 
 ```sh
 omarchy-shell kristofferr.groups.devices open
@@ -84,50 +104,34 @@ omarchy-shell kristofferr.groups.devices eject omarchy.network
 omarchy-shell kristofferr.groups.devices reorder 0 2
 ```
 
-Drag a bar widget onto a group to absorb it, reorder within the drawer, or drag
-it back onto the bar at the position you want. Drag directly to another group
-to transfer it in one move. Dropping outside the bar and drawers cancels the move.
-The actual plugin widgets remain interactive: native hover tooltips, right-click
-actions, middle-clicks, and scrolling keep their normal handlers.
-Nested groups are intentionally unsupported. Each group's IPC target and config
-writes are independent. Status includes the group identity, live child load
-state, and geometry for diagnostics.
+Replace `devices` with your group ID. The `eject` command places the widget beside its group; dragging lets you choose the position.
 
-## Why this base and which separators?
+## Development
 
-Research checked on 2026-09-07:
+```sh
+./validate
+./install-local.sh
+```
 
-| Option | Fit for this layout |
-| --- | --- |
-| [Nook 1.1.2](https://github.com/Katsari/nook) | Closest fit: actual widgets in an anchored strip below the existing bar. Upstream supports one drawer; this fork adds independent instances. |
-| [Skål Bar](https://github.com/outcrop-labs/skal-bar) | Replaces the full bar with reveal controls for its three regions. More replacement code than needed for several independent drawers. |
-| [OmaBar Drawer](https://github.com/amitcpatel/omabar-drawer) | Full-bar replacement that collapses the right region behind one icon. |
-| [Plugin Drawer](https://github.com/alyayman921/Omarchy-drawer) | Single drawer with a grid/list interface. A different presentation from the small strips wanted here. |
-| [Bar Studio](https://github.com/andreconde21/omarchy-bar-studio) | Layout editor, not a multiple-drawer host. Its tray collapse needs a compatible tray; the stock tray does not display its hosted array. |
-| Stock `omarchy.spacer` | Built-in blank spacing, repeatable with configurable `size`. |
-| [Bar Divider 1.1.0](https://github.com/Rizmi/omarchy-divider-plugin) | Existing repeatable line, dot or pipe separators. Reused unchanged for the live layout. |
+Validation runs layout tests, Qt 6 lint, the Quickshell harness, shell syntax checks, and manifest validation when Omarchy is installed. The local installer copies runtime files into the user plugin directory and restarts the shell to clear cached QML components. It does not change the layout.
 
-Example separator: `{"id":"io.github.rizmi.divider","style":"line","margin":5}`.
+See [development notes](docs/development.md) for optional live pointer tests, hosting limitations, and the original base/separator comparison.
 
-## Validation and boundaries
+## Security and system changes
 
-`tests/all.sh` runs the pure layout tests, Qt 6 lint, manifest validation and a
-Quickshell harness. The harness exercises separate instance config writes,
-settings retention, open/close isolation and sibling closing. Pure tests also
-cover absent/duplicate IDs and every group-scoped mutation.
+Groups runs inside Omarchy Shell with your user's permissions. Moving widgets updates `~/.config/omarchy/shell.json`, including the plugin enablement entries required by hosted widgets. It does not install packages or change Hyprland configuration. Hosted plugins retain their own behavior and permissions.
 
-Optional real-pointer drag tests require `tests/tools/vptr/build.sh` and
-`NOOK_GROUP_ID=<group> bash tests/all.sh --drag`. They temporarily modify and
-restore the live layout, so run them only while the pointer is free.
+## Troubleshooting
 
-`uv run --no-project python tests/interactions.test.py` uses a temporary harmless
-widget to check bar-to-group dragging, group-to-group transfer, precise bar drop
-placement, cancellation, and native tooltip/right-click behavior. It restores the
-original configuration and pointer. Set `NOOK_GROUP_ID` and
-`NOOK_TARGET_GROUP_ID` to two existing groups (defaults: `windows` and `input`).
+- **Empty drawer:** drag an icon onto the group. An empty group has no drawer content to display.
+- **Widget missing:** verify the plugin is installed and enabled. Some plugins hide their icon while idle or when hardware is absent.
+- **Changes do not appear:** run `omarchy plugin validate .` in the checkout. After replacing plugin code manually, restart the shell with `omarchy restart shell` to clear cached hosted components.
+- **Several groups behave unexpectedly:** check that every `groupId` is unique. Config edits refuse ambiguous group identities.
 
-Nook integrates with Omarchy's bar internals rather than a stable hosting API.
-Top-bar behavior is the supported and verified configuration here. Some widgets
-hide themselves when idle or when hardware is absent; their slots are still
-loaded. Widgets retain their own tooltip and status behavior. The group trigger
-does not aggregate every plugin's urgency state.
+## Credits
+
+Based on [Nook](https://github.com/Katsari/nook) by Katsari, starting from version 1.1.2. Its widget hosting, panel anchoring, scrolling, original drag handling, and Git history are preserved.
+
+## License
+
+MIT

@@ -36,6 +36,7 @@ jobs:
             exit 1
           fi
           "$QMLFORMAT" BarWidget.qml > /dev/null
+          "$QMLFORMAT" Settings.qml > /dev/null
 
       - name: Run tests
-        run: tests/all.sh
+        run: ./validate

@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+set -euo pipefail
+root_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
+bash -n "$root_dir/install-local.sh" "$root_dir/validate" "$root_dir/tests/all.sh" "$root_dir/tests/qml.test.sh" "$root_dir/tests/tools/vptr/build.sh"
+exec bash "$root_dir/tests/all.sh"

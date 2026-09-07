@@ -3,8 +3,8 @@
   "id": "kristofferr.groups",
   "name": "Groups",
   "version": "1.2.0",
-  "author": "Katsari, kristofferR",
-  "description": "Independent icon groups with drawers below the bar, based on Nook.",
+  "author": "Kristoffer Risanger (@kristofferR)",
+  "description": "Independent icon groups for Omarchy: drawers below the bar, drag-and-drop organization, and native widget interactions.",
   "kinds": [
     "bar-widget",
     "overlay"
@@ -15,7 +15,7 @@
   },
   "barWidget": {
     "displayName": "Groups",
-    "description": "Independent icon groups with drawers below the bar, based on Nook.",
+    "description": "Independent icon groups for Omarchy: drawers below the bar, drag-and-drop organization, and native widget interactions.",
     "category": "Layout",
     "allowMultiple": true,
     "defaultSection": "right",
@@ -67,5 +67,6 @@
     ]
   },
   "license": "MIT",
-  "icon": "assets/icon.svg"
+  "icon": "assets/icon.svg",
+  "preview": "preview.png"
 }
