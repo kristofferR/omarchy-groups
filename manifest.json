@@ -30,12 +30,6 @@
     },
     "schema": [
       {
-        "key": "groupId",
-        "type": "string",
-        "label": "Unique group ID",
-        "defaultValue": ""
-      },
-      {
         "key": "label",
         "type": "string",
         "label": "Group name",

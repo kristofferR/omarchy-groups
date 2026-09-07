@@ -56,7 +56,7 @@ cp -- "$ROOT_DIR/tests/fixtures/harness.qml" "$TMP/config/shell.qml"
 ln -s -- "$OMARCHY_SOURCE/shell/Commons" "$TMP/config/Commons"
 ln -s -- "$OMARCHY_SOURCE/shell/Ui" "$TMP/config/Ui"
 
-env NOOK_SOURCE_DIR="$ROOT_DIR" \
+env NOOK_SOURCE_DIR="$ROOT_DIR" GROUPS_TEST_CONFIG="$TMP/shell.json" \
   timeout 25 quickshell -p "$TMP/config" --no-color >"$TMP/quickshell.log" 2>&1 || true
 
 if ! grep -Fq 'NOOK_TEST_OK' "$TMP/quickshell.log" \

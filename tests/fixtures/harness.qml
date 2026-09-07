@@ -17,6 +17,7 @@ ShellRoot {
 
   property var widget: null
   property var secondWidget: null
+  property var settingsPanel: null
   property int stage: 0
   property int ticksInStage: 0
 
@@ -25,6 +26,20 @@ ShellRoot {
       + " config=" + JSON.stringify(mockShell.shellConfig))
     ticker.stop()
     Qt.quit()
+  }
+
+  function namedChild(object, name) {
+    if (object.objectName === name) return object
+    if (object.contentItem) {
+      var contentChild = namedChild(object.contentItem, name)
+      if (contentChild) return contentChild
+    }
+    var children = object.data || object.children || []
+    for (var i = 0; i < children.length; i++) {
+      var found = namedChild(children[i], name)
+      if (found) return found
+    }
+    return null
   }
 
   function pass() {
@@ -177,6 +192,8 @@ ShellRoot {
       }
     }
   }
+
+  QtObject { id: scopedShell; property var barConfig: ({}) }
 
   Item { id: host }
 
@@ -364,6 +381,64 @@ ShellRoot {
     } else if (stage === 6) {
       if (widget.expanded || widget.cells[1].childItem.opened || mockBar.activePopout !== null)
         return fail("explicit group close did not dismiss child")
+      var component = Qt.createComponent(encodeURI("file://" + sourceDir + "/Settings.qml"), Component.PreferSynchronous)
+      settingsPanel = component.createObject(host, {shell: mockShell})
+      if (!settingsPanel) return fail(component.errorString())
+      // Keep the settings surface unmapped. Exercise the real controls against
+      // the mock config, so this never edits the user's layout or takes focus.
+      var surface = namedChild(settingsPanel, "settingsWindow")
+      if (!surface) return fail("settings surface not found")
+      surface.visible = false
+      mockRegistry.installedPlugins = {"w.clock": {name: "Clock", kinds: ["bar-widget"]}, "w.new": {name: "New", kinds: ["bar-widget"]}}
+      mockShell.shellConfig = {bar: {layout: {left: [{id: "w.clock", format: "short"}], center: [], right: ["kristofferr.groups"]}}, plugins: []}
+      settingsPanel.open("{}")
+      if (settingsPanel.groups.length !== 1 || !settingsPanel.selectedId) return fail("initial settings did not assign group identity")
+      namedChild(settingsPanel, "groupName").text = "My group"
+      namedChild(settingsPanel, "saveGroup").clicked()
+      if (settingsPanel.groups[0].name !== "My group") return fail("name control did not save")
+      namedChild(settingsPanel, "widgetsTab").clicked()
+      namedChild(settingsPanel, "addWidgets").clicked()
+      settingsPanel.addWidget(settingsPanel.availableWidgets.find(function(choice) { return choice.id === "w.clock" }))
+      if (settingsPanel.groupWidgets.length !== 1) return fail("widget picker did not move clock")
+      settingsPanel.showWidgets()
+      settingsPanel.addWidget(settingsPanel.availableWidgets.find(function(choice) { return choice.id === "w.new" }))
+      settingsPanel.moveWidget(1, -1)
+      if (settingsPanel.groupWidgets[0].id !== "w.new") return fail("widget reorder control failed")
+      settingsPanel.returnWidget(settingsPanel.groupWidgets[1])
+      if (mockShell.shellConfig.bar.layout.right[1].format !== "short") return fail("return to bar lost widget settings")
+      var originalId = settingsPanel.selectedId
+      namedChild(settingsPanel, "addGroup").clicked()
+      if (settingsPanel.groups.length !== 2) return fail("Add group button failed")
+      var newId = settingsPanel.selectedId
+      settingsPanel.open(JSON.stringify({groupId: originalId}))
+      if (settingsPanel.selectedId !== originalId) return fail("settings ignored clicked group")
+      namedChild(settingsPanel, "removeGroup").clicked()
+      settingsPanel.selectGroup(settingsPanel.groups.find(function(group) { return group.id === newId }))
+      namedChild(settingsPanel, "removeGroup").clicked()
+      if (settingsPanel.groups.length || !settingsPanel.settingsShortcut) return fail("last group removed settings access")
+      namedChild(settingsPanel, "addGroup").clicked()
+      if (settingsPanel.groups.length !== 1) return fail("cannot start again after removing all groups")
+      settingsPanel.close()
+      settingsPanel.destroy()
+      settingsPanel = component.createObject(host, {shell: scopedShell})
+      namedChild(settingsPanel, "settingsWindow").visible = false
+      var file = namedChild(settingsPanel, "groupsConfig")
+      file.path = Quickshell.env("GROUPS_TEST_CONFIG")
+      file.setText(JSON.stringify({version: 1, bar: {layout: {left: [], center: [], right: ["kristofferr.groups"]}}, plugins: [{id: "other-service", setting: "keep"}]}))
+      namedChild(settingsPanel, "widgetCatalog").command = ["printf", "%s", JSON.stringify([{id: "w.new", name: "New", kinds: ["bar-widget"]}])]
+      settingsPanel.open("{}")
+      next()
+    } else if (stage === 7) {
+      if (!settingsPanel.catalogLoaded) return
+      if (settingsPanel.groups.length !== 1 || !settingsPanel.selectedId) return fail("scoped settings did not load initial group")
+      namedChild(settingsPanel, "groupName").text = "Saved to disk"
+      namedChild(settingsPanel, "saveGroup").clicked()
+      settingsPanel.addWidget(settingsPanel.availableWidgets.find(function(choice) { return choice.id === "w.new" }))
+      var saved = JSON.parse(namedChild(settingsPanel, "groupsConfig").text())
+      if (saved.bar.layout.right[0].label !== "Saved to disk" || saved.bar.layout.right[0].items[0].id !== "w.new")
+        return fail("scoped settings did not persist name and widgets")
+      if (saved.plugins[0].setting !== "keep") return fail("scoped settings overwrote unrelated service settings")
+      settingsPanel.close()
       pass()
     }
   }

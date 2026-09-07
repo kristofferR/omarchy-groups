@@ -77,6 +77,12 @@ BarWidget {
   }
 
   readonly property var shellConfig: bar && bar.shell ? bar.shell.shellConfig : null
+  onShellConfigChanged: Qt.callLater(ensureIdentities)
+
+  function ensureIdentities() {
+    if (Layout.needsGroupIds(root.shellConfig, root.moduleName))
+      mutate(function(config) { Layout.ensureGroupIds(config, root.moduleName) })
+  }
 
   // A transparent bar picks barForeground to contrast with the wallpaper, not
   // with this card, so the card stays on the theme and hosted widgets are
@@ -192,7 +198,7 @@ BarWidget {
 
   function openSettings() {
     close()
-    if (bar && bar.shell) bar.shell.summon(moduleName, "")
+    if (bar && bar.shell) bar.shell.summon(moduleName, JSON.stringify(isManager ? {} : {groupId: root.groupId}))
   }
   function open() { if (isManager) openSettings(); else latched = true }
   function close() {
@@ -787,12 +793,12 @@ BarWidget {
     }
     active: root.dropHovered || root.expanded
     activeColor: Color.accent          // `active` defaults to bar.urgent, kept for urgency
-    tooltipText: root.isManager ? "Groups settings" : root.trigger === "hover" || root.expanded
+    tooltipText: root.isManager ? "Groups settings" : root.entries.length === 0 ? "Add widgets to " + root.groupLabel : root.trigger === "hover" || root.expanded
       ? "" : root.groupLabel + " · " + root.entries.length + " plugins"
     // Tests `latched`, not `expanded`: hovering already makes it expanded, so
     // branching on that meant a click could only ever close it.
     onPressed: function(button) {
-      if (root.isManager || button === Qt.RightButton) { root.openSettings(); return }
+      if (root.isManager || root.entries.length === 0 || button === Qt.RightButton) { root.openSettings(); return }
       if (root.latched) {
         root.latched = false
         root.hoverSuppressed = true
