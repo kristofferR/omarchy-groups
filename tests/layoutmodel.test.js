@@ -466,3 +466,30 @@ console.log("multiple-group isolation passed")
   assert.equal(JSON.stringify(config), before)
 }
 console.log('exact bar placement and group transfer passed')
+
+{
+  const config = makeConfig()
+  config.bar.layout.right[1].groupId = 'group-1'
+  const id = Layout.addGroup(config, NOOK, 'left')
+  assert.equal(id, 'group-2')
+  const drawer = config.bar.layout.right[1]
+  drawer.custom = 'keep'
+  drawer.items.push({id: 'w.new', setting: 42}) // a concurrent drag
+  assert.equal(Layout.updateGroup(config, NOOK, 'group-1', {label: '  Devices  ', icon: 'devices', trigger: 'click', section: 'center'}), true)
+  assert.equal(config.bar.layout.center[0], drawer)
+  assert.equal(drawer.label, 'Devices')
+  assert.equal(drawer.custom, 'keep')
+  same(drawer.items, [{id: 'w.one'}, {id: 'w.new', setting: 42}])
+  const before = JSON.stringify(config)
+  assert.equal(Layout.updateGroup(config, NOOK, 'group-1', {label: ' ', icon: 'group', trigger: 'click', section: 'left'}), false)
+  assert.equal(Layout.removeGroup(config, NOOK, 'missing', []), false)
+  assert.equal(JSON.stringify(config), before)
+  config.plugins.push({id: 'w.new', setting: 99})
+  assert.equal(Layout.removeGroup(config, NOOK, 'group-1', ['w.new']), true)
+  same(config.bar.layout.center, [{id: 'w.one'}, {id: 'w.new', setting: 99}])
+  assert(config.plugins.some(e => e.id === NOOK))
+  assert(!config.plugins.some(e => e.id === 'w.new'))
+  config.bar.layout.right.push({id: NOOK, groupId: 'settings', role: 'manager'})
+  assert.equal(Layout.removeGroup(config, NOOK, 'settings', []), false)
+}
+console.log('group settings preserve widgets, settings, and stable identities')

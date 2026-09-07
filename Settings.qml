@@ -1,45 +1,99 @@
 import QtQuick
+import QtQuick.Controls as QQC
 import Quickshell
 import Quickshell.Io
 import Quickshell.Wayland
 import qs.Commons
 import qs.Ui
 import "GroupIcons.js" as GroupIcons
+import "LayoutModel.js" as Layout
 
 Item {
   id: root
   property var shell: null
   property var manifest: null
   property bool opened: false
+  property string selectedId: ""
+  property bool hasSelection: false
+  property string chosenIcon: "group"
+  property string message: ""
+  readonly property var iconNames: Object.keys(GroupIcons.paths).filter(function(name) { return name !== "manager" })
   readonly property var groups: {
-    var layout = shell && shell.shellConfig && shell.shellConfig.bar
-      ? shell.shellConfig.bar.layout : null
+    var layout = shell && shell.shellConfig && shell.shellConfig.bar ? shell.shellConfig.bar.layout : null
     var result = []
     if (!layout) return result
-    var sections = ["left", "center", "right"]
-    for (var s = 0; s < sections.length; s++) {
-      var entries = layout[sections[s]] || []
-      for (var i = 0; i < entries.length; i++) {
-        var entry = entries[i]
-        if (entry.id === "kristofferr.groups" && entry.role !== "manager")
-          result.push({name: entry.label || "Group", icon: entry.icon || "group",
-            section: sections[s], count: Array.isArray(entry.items) ? entry.items.length : 0})
-      }
-    }
+    Layout.SECTIONS.forEach(function(section) {
+      ;(layout[section] || []).forEach(function(entry) {
+        if (Layout.entryIdOf(entry) === "kristofferr.groups" && entry.role !== "manager")
+          result.push({id: String(entry.groupId || ""), name: entry.label || "Group", icon: entry.icon || "group",
+            trigger: entry.trigger || "hover", section: section, count: entry.items ? entry.items.length : 0})
+      })
+    })
     return result
   }
 
+  function selectGroup(group) {
+    hasSelection = !!group
+    selectedId = group ? group.id : ""
+    nameField.text = group ? group.name : ""
+    chosenIcon = group ? group.icon : "group"
+    positionPicker.value = group ? group.section : "right"
+    triggerPicker.value = group ? group.trigger : "hover"
+    message = ""
+  }
   function open(payload) {
     opened = true
+    selectGroup(groups.find(function(group) { return group.id === selectedId }) || groups[0])
     Qt.callLater(function() { content.forceActiveFocus() })
   }
   function close() { opened = false }
   function toggle() { if (opened) close(); else open("") }
+  function mutate(change) {
+    if (!shell || typeof shell.mutateShellConfig !== "function") return false
+    var result = false
+    shell.mutateShellConfig(function(config) {
+      if (config.bar && config.bar.layout) result = change(config)
+    })
+    return result
+  }
+  function addGroup() {
+    var id = mutate(function(config) { return Layout.addGroup(config, "kristofferr.groups", "right") })
+    if (!id) { message = "Could not add a group."; return }
+    selectGroup({id: id, name: "New group", icon: "group", section: "right", trigger: "hover"})
+    Qt.callLater(function() { nameField.forceActiveFocus(); nameField.selectAll() })
+  }
+  function saveGroup() {
+    if (!hasSelection) return
+    var changes = {label: nameField.text, icon: chosenIcon, section: positionPicker.value, trigger: triggerPicker.value}
+    var ok = mutate(function(config) { return Layout.updateGroup(config, "kristofferr.groups", selectedId, changes) })
+    message = ok ? "Saved" : "Could not save. Check the name and that the group ID is unique."
+    if (ok) nameField.text = changes.label.trim()
+  }
+  function removeGroup() {
+    if (!hasSelection) return
+    var installed = shell && shell.pluginRegistry ? shell.pluginRegistry.installedPlugins : ({})
+    var widgetOnly = Object.keys(installed || {}).filter(function(id) {
+      var kinds = installed[id].kinds
+      return kinds && kinds.length === 1 && kinds[0] === "bar-widget"
+    })
+    var oldId = selectedId
+    var next = groups.filter(function(group) { return group.id !== oldId })[0]
+    var ok = mutate(function(config) { return Layout.removeGroup(config, "kristofferr.groups", oldId, widgetOnly) })
+    if (ok) { selectGroup(next); message = "Group removed. Its icons are back on the bar." }
+    else message = "Could not remove this group. Its ID may be ambiguous."
+  }
 
   IpcHandler {
     target: "kristofferr.groups.settings-panel"
-    function status(): string { return JSON.stringify({opened: root.opened, groups: root.groups}) }
+    function status(): string { return JSON.stringify({opened: root.opened, groups: root.groups, selectedId: root.selectedId, message: root.message}) }
     function close(): void { root.close() }
+  }
+
+  component Label: Text {
+    color: Color.menu.text
+    font.family: Style.font.menuFamily
+    font.pixelSize: Style.font.body
+    textFormat: Text.PlainText
   }
 
   PanelWindow {
@@ -51,20 +105,18 @@ Item {
     WlrLayershell.namespace: "omarchy-groups-settings"
     WlrLayershell.layer: WlrLayer.Overlay
     WlrLayershell.keyboardFocus: root.opened ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
-
     Rectangle { anchors.fill: parent; color: Color.menu.scrim }
     MouseArea { anchors.fill: parent; onClicked: root.close() }
 
     BorderSurface {
       id: card
       anchors.centerIn: parent
-      width: Math.min(Style.space(520), window.width - Style.gapsOut * 2)
-      height: Math.min(heading.implicitHeight + introduction.implicitHeight + groupList.implicitHeight + footer.implicitHeight + content.spacing * 3 + Style.space(48), window.height - Style.gapsOut * 2)
+      width: Math.min(Style.space(780), window.width - Style.gapsOut * 2)
+      height: Math.min(Style.space(600), window.height - Style.gapsOut * 2)
       color: Color.menu.background
       radius: Style.cornerRadius
       borderSpec: Border.surfaceSpec("menu", "border", Color.menu.border, Math.max(1, Style.space(2)))
       MouseArea { anchors.fill: parent }
-
       Column {
         id: content
         anchors.fill: parent
@@ -72,110 +124,130 @@ Item {
         spacing: Style.space(20)
         focus: true
         Keys.onEscapePressed: function(event) { root.close(); event.accepted = true }
-
         Row {
-          id: heading
           spacing: Style.space(12)
           Image {
-            width: Style.space(36)
-            height: width
+            width: Style.space(36); height: width
             source: GroupIcons.source("manager", String(Color.accent))
             sourceSize.width: width * (window.screen ? window.screen.devicePixelRatio : 1)
             sourceSize.height: sourceSize.width
           }
           Column {
-            Text { text: "Groups"; color: Color.menu.text; font.family: Style.font.menuFamily; font.pixelSize: Style.font.title; font.bold: true }
-            Text { text: "Settings"; color: Qt.alpha(Color.menu.text, 0.65); font.family: Style.font.menuFamily; font.pixelSize: Style.font.caption }
+            Label { text: "Groups"; font.pixelSize: Style.font.title; font.bold: true }
+            Label { text: "Choose a group to customize it"; opacity: 0.65; font.pixelSize: Style.font.caption }
           }
         }
-
-        Text {
-          id: introduction
+        Row {
           width: parent.width
-          text: "Drag icons between the bar and your groups to organize them."
-          wrapMode: Text.WordWrap
-          color: Color.menu.text
-          font.family: Style.font.menuFamily
-          font.pixelSize: Style.font.body
-        }
-
-        Flickable {
-          width: parent.width
-          height: Math.max(0, Math.min(groupList.implicitHeight, content.height - y - footer.implicitHeight - content.spacing))
-          contentWidth: width
-          contentHeight: groupList.implicitHeight
-          clip: true
-          boundsBehavior: Flickable.StopAtBounds
+          height: Math.max(0, content.height - y - footer.height - content.spacing)
+          spacing: Style.space(24)
           Column {
-            id: groupList
-            width: parent.width
-            spacing: Style.space(4)
-            Repeater {
-              model: root.groups
-              Rectangle {
-                required property var modelData
-                width: groupList.width
-                height: Style.space(46)
-                radius: Style.cornerRadius
-                color: Qt.alpha(Color.menu.text, 0.04)
-                Image {
-                  id: groupIcon
-                  anchors.left: parent.left
-                  anchors.leftMargin: Style.space(12)
-                  anchors.verticalCenter: parent.verticalCenter
-                  width: Style.space(20)
-                  height: width
-                  source: GroupIcons.source(modelData.icon, String(Color.menu.text))
-                  sourceSize.width: width * (window.screen ? window.screen.devicePixelRatio : 1)
-                  sourceSize.height: sourceSize.width
-                }
-                Text {
-                  anchors.left: groupIcon.right
-                  anchors.leftMargin: Style.space(12)
-                  anchors.right: details.left
-                  anchors.rightMargin: Style.space(12)
-                  anchors.verticalCenter: parent.verticalCenter
-                  text: modelData.name
-                  elide: Text.ElideRight
-                  color: Color.menu.text
-                  font.family: Style.font.menuFamily
-                  font.pixelSize: Style.font.body
-                }
-                Text {
-                  id: details
-                  anchors.right: parent.right
-                  anchors.rightMargin: Style.space(12)
-                  anchors.verticalCenter: parent.verticalCenter
-                  text: modelData.section + " · " + modelData.count + " icons"
-                  color: Qt.alpha(Color.menu.text, 0.6)
-                  font.family: Style.font.menuFamily
-                  font.pixelSize: Style.font.caption
+            id: sidebar
+            width: Math.round((parent.width - parent.spacing) * 0.4)
+            height: parent.height
+            spacing: Style.space(12)
+            Flickable {
+              width: parent.width
+              height: Math.max(0, parent.height - addButton.height - parent.spacing)
+              contentWidth: width
+              contentHeight: groupList.implicitHeight
+              clip: true
+              boundsBehavior: Flickable.StopAtBounds
+              QQC.ScrollBar.vertical: QQC.ScrollBar {}
+              Column {
+                id: groupList
+                width: parent.width
+                spacing: Style.space(4)
+                Repeater {
+                  model: root.groups
+                  Rectangle {
+                    required property var modelData
+                    width: groupList.width
+                    height: Style.space(54)
+                    radius: Style.cornerRadius
+                    color: Qt.alpha(Color.menu.text, root.hasSelection && root.selectedId === modelData.id ? 0.14 : (hover.hovered ? 0.08 : 0.04))
+                    Image {
+                      id: groupIcon
+                      anchors.left: parent.left; anchors.leftMargin: Style.space(10)
+                      anchors.verticalCenter: parent.verticalCenter
+                      width: Style.space(20); height: width
+                      source: GroupIcons.source(modelData.icon, String(Color.menu.text))
+                      sourceSize.width: width * (window.screen ? window.screen.devicePixelRatio : 1)
+                      sourceSize.height: sourceSize.width
+                    }
+                    Column {
+                      anchors.left: groupIcon.right; anchors.leftMargin: Style.space(10)
+                      anchors.right: parent.right; anchors.rightMargin: Style.space(10)
+                      anchors.verticalCenter: parent.verticalCenter
+                      Label { width: parent.width; text: modelData.name; elide: Text.ElideRight }
+                      Label { text: modelData.section + " · " + modelData.count + " icons"; font.pixelSize: Style.font.caption; opacity: 0.6 }
+                    }
+                    HoverHandler { id: hover }
+                    TapHandler { onTapped: root.selectGroup(modelData) }
+                  }
                 }
               }
             }
+            Button { id: addButton; width: parent.width; text: "+ Add group"; bordered: true; focusable: true; onClicked: root.addGroup() }
+          }
+          Flickable {
+            width: parent.width - sidebar.width - parent.spacing
+            height: parent.height
+            contentWidth: width
+            contentHeight: editor.implicitHeight
+            clip: true
+            boundsBehavior: Flickable.StopAtBounds
+              QQC.ScrollBar.vertical: QQC.ScrollBar {}
+            Column {
+              id: editor
+              width: parent.width
+              spacing: Style.space(16)
+              visible: root.hasSelection
+              Label { text: "Name"; opacity: 0.7 }
+              TextField { id: nameField; width: parent.width; maximumLength: 80; placeholderText: "Group name"; foreground: Color.menu.text; onAccepted: root.saveGroup() }
+              Label { text: "Icon"; opacity: 0.7 }
+              Flow {
+                width: parent.width
+                spacing: Style.space(6)
+                Repeater {
+                  model: root.iconNames
+                  Button {
+                    required property string modelData
+                    width: Style.space(42); height: width
+                    bordered: true; focusable: true
+                    selected: root.chosenIcon === modelData
+                    tooltipText: modelData
+                    onClicked: root.chosenIcon = modelData
+                    Image {
+                      anchors.centerIn: parent
+                      width: Style.space(22); height: width
+                      source: GroupIcons.source(modelData, String(Color.menu.text))
+                      sourceSize.width: width * (window.screen ? window.screen.devicePixelRatio : 1)
+                      sourceSize.height: sourceSize.width
+                    }
+                  }
+                }
+              }
+              Row {
+                width: parent.width
+                spacing: Style.space(12)
+                Dropdown { id: positionPicker; width: (parent.width - parent.spacing) / 2; label: "Position"; options: ["left", "center", "right"] }
+                Dropdown { id: triggerPicker; width: (parent.width - parent.spacing) / 2; label: "Open on"; options: ["hover", "click"] }
+              }
+              Button { text: "Save changes"; bordered: true; selected: true; focusable: true; enabled: nameField.text.trim().length > 0; onClicked: root.saveGroup() }
+              Label { width: parent.width; text: "Drag icons to reorder them or move them between groups."; wrapMode: Text.WordWrap; opacity: 0.6; font.pixelSize: Style.font.caption }
+              Button { text: "Remove group"; bordered: true; focusable: true; onClicked: root.removeGroup() }
+              Label { width: parent.width; text: "Removing a group returns its icons to the bar."; wrapMode: Text.WordWrap; opacity: 0.6; font.pixelSize: Style.font.caption }
+            }
+            Label { visible: !root.hasSelection; width: parent.width; text: "Add a group to get started."; wrapMode: Text.WordWrap }
           }
         }
-
-        Column {
+        Item {
           id: footer
           width: parent.width
-          spacing: Style.space(16)
-          Text {
-            width: parent.width
-            text: "Coming next: add and remove groups, customize names and icons."
-            wrapMode: Text.WordWrap
-            color: Qt.alpha(Color.menu.text, 0.6)
-            font.family: Style.font.menuFamily
-            font.pixelSize: Style.font.caption
-          }
-          Button {
-            anchors.right: parent.right
-            text: "Done"
-            bordered: true
-            focusable: true
-            foreground: Color.menu.text
-            onClicked: root.close()
-          }
+          height: doneButton.height
+          Label { anchors.left: parent.left; anchors.right: doneButton.left; anchors.rightMargin: Style.space(12); anchors.verticalCenter: parent.verticalCenter; text: root.message; wrapMode: Text.WordWrap; font.pixelSize: Style.font.caption; opacity: 0.7 }
+          Button { id: doneButton; anchors.right: parent.right; text: "Done"; bordered: true; focusable: true; onClicked: root.close() }
         }
       }
     }

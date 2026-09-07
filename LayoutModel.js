@@ -258,3 +258,57 @@ function strandedIds(plugins, hostedIds) {
   }
   return out
 }
+
+// Settings edits resolve against the latest config, retaining hosted widgets
+// and fields a different plugin or concurrent bar drag may have changed.
+function addGroup(config, moduleName, section) {
+  if (SECTIONS.indexOf(section) < 0 || !config.bar || !config.bar.layout) return ""
+  var layout = config.bar.layout
+  var used = []
+  SECTIONS.forEach(function(key) {
+    ;(layout[key] || []).forEach(function(entry) {
+      if (entryIdOf(entry) === moduleName) used.push(String(entry.groupId || ""))
+    })
+  })
+  var n = 1
+  while (used.indexOf("group-" + n) !== -1) n++
+  var id = "group-" + n
+  if (!Array.isArray(layout[section])) layout[section] = []
+  layout[section].push({id: moduleName, groupId: id, label: "New group", icon: "group", trigger: "hover", duration: 0, items: []})
+  return id
+}
+
+function updateGroup(config, moduleName, groupId, changes) {
+  if (!changes || typeof changes.label !== "string" || !changes.label.trim()
+      || typeof changes.icon !== "string" || !changes.icon.trim()
+      || ["hover", "click"].indexOf(changes.trigger) < 0
+      || SECTIONS.indexOf(changes.section) < 0) return false
+  var found = findDrawerEntry(config.bar.layout, moduleName, groupId)
+  if (!found || found.entry.role === "manager") return false
+  found.entry.label = changes.label.trim()
+  found.entry.icon = changes.icon
+  found.entry.trigger = changes.trigger
+  if (found.section !== changes.section) {
+    if (!Array.isArray(config.bar.layout[changes.section])) config.bar.layout[changes.section] = []
+    config.bar.layout[found.section].splice(found.index, 1)
+    config.bar.layout[changes.section].push(found.entry)
+  }
+  return true
+}
+
+function removeGroup(config, moduleName, groupId, widgetOnlyIds) {
+  var found = findDrawerEntry(config.bar.layout, moduleName, groupId)
+  if (!found || found.entry.role === "manager") return false
+  var items = Array.isArray(found.entry.items) ? found.entry.items : []
+  items.forEach(function(entry) {
+    var id = entryIdOf(entry)
+    if ((widgetOnlyIds || []).indexOf(id) !== -1) reclaim(config, found.entry, id)
+    unmarkEnabled(config, id)
+  })
+  // reclaim can replace item objects, so read the resulting array again.
+  var restored = found.entry.items || []
+  config.bar.layout[found.section].splice.apply(config.bar.layout[found.section], [found.index, 1].concat(restored))
+  // Keep settings accessible even when the last drawer is removed.
+  markEnabled(config, moduleName)
+  return true
+}
