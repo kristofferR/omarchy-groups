@@ -71,7 +71,10 @@ omarchy-shell kristofferr.groups.devices reorder 0 2
 ```
 
 Drag a bar widget onto a group to absorb it, reorder within the drawer, or drag
-it back onto the bar to eject it. To move between groups, eject then absorb.
+it back onto the bar at the position you want. Drag directly to another group
+to transfer it in one move. Dropping outside the bar and drawers cancels the move.
+The actual plugin widgets remain interactive: native hover tooltips, right-click
+actions, middle-clicks, and scrolling keep their normal handlers.
 Nested groups are intentionally unsupported. Each group's IPC target and config
 writes are independent. Status includes the group identity, live child load
 state, and geometry for diagnostics.
@@ -102,6 +105,12 @@ cover absent/duplicate IDs and every group-scoped mutation.
 Optional real-pointer drag tests require `tests/tools/vptr/build.sh` and
 `NOOK_GROUP_ID=<group> bash tests/all.sh --drag`. They temporarily modify and
 restore the live layout, so run them only while the pointer is free.
+
+`uv run --no-project python tests/interactions.test.py` uses a temporary harmless
+widget to check bar-to-group dragging, group-to-group transfer, precise bar drop
+placement, cancellation, and native tooltip/right-click behavior. It restores the
+original configuration and pointer. Set `NOOK_GROUP_ID` and
+`NOOK_TARGET_GROUP_ID` to two existing groups (defaults: `windows` and `input`).
 
 Nook integrates with Omarchy's bar internals rather than a stable hosting API.
 Top-bar behavior is the supported and verified configuration here. Some widgets

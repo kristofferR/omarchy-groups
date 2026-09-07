@@ -7,6 +7,7 @@
 //   m <x> <y>   move the pointer to an absolute position
 //   d           press the left button
 //   u           release the left button
+//   dr / ur     press / release the right button
 //   s <ms>      sleep
 //
 // With no commands it reads them from stdin, one per line, until EOF. The
@@ -68,10 +69,11 @@ static int apply(struct zwlr_virtual_pointer_v1 *pointer, struct wl_display *dis
     zwlr_virtual_pointer_v1_motion_absolute(pointer, now_ms(), (uint32_t)atoi(token[1]),
                                             (uint32_t)atoi(token[2]), extent_x, extent_y);
     zwlr_virtual_pointer_v1_frame(pointer);
-  } else if (count >= 1 && (strcmp(token[0], "d") == 0 || strcmp(token[0], "u") == 0)) {
+  } else if (count >= 1 && (strcmp(token[0], "d") == 0 || strcmp(token[0], "u") == 0
+      || strcmp(token[0], "dr") == 0 || strcmp(token[0], "ur") == 0)) {
     uint32_t state = token[0][0] == 'd' ? WL_POINTER_BUTTON_STATE_PRESSED
                                         : WL_POINTER_BUTTON_STATE_RELEASED;
-    zwlr_virtual_pointer_v1_button(pointer, now_ms(), BTN_LEFT, state);
+    zwlr_virtual_pointer_v1_button(pointer, now_ms(), token[0][1] == 'r' ? BTN_RIGHT : BTN_LEFT, state);
     zwlr_virtual_pointer_v1_frame(pointer);
   } else if (count >= 2 && strcmp(token[0], "s") == 0) {
     wl_display_flush(display);

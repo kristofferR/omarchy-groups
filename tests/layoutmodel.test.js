@@ -435,3 +435,34 @@ console.log("multiple-group isolation passed")
   assert.equal(Layout.absorb(config, NOOK, "w.two", -1, true), false)
   assert.equal(JSON.stringify(config), before, "duplicate bare groups must remain untouched")
 }
+
+// Dragging out preserves settings and uses the exact slot, including duplicates.
+{
+  const config = makeConfig()
+  config.bar.layout.left = [{id: 'omarchy.spacer'}, {id: 'omarchy.spacer'}]
+  config.bar.layout.right[1].items[0].format = 'retained'
+  assert.equal(Layout.eject(config, NOOK, 'w.one', true, '', {section: 'left', index: 1}), true)
+  same(config.bar.layout.left, [{id: 'omarchy.spacer'}, {id: 'w.one', format: 'retained'}, {id: 'omarchy.spacer'}])
+  const invalid = makeConfig()
+  const before = JSON.stringify(invalid)
+  assert.equal(Layout.eject(invalid, NOOK, 'w.one', true, '', {section: 'left', index: 20}), false)
+  assert.equal(JSON.stringify(invalid), before)
+}
+
+// Transfer directly between groups, keeping the existing enablement marker.
+{
+  const config = makeConfig()
+  config.bar.layout.right[1].groupId = 'source'
+  config.bar.layout.right[1].items[0].setting = 'retained'
+  config.bar.layout.left.push({id: NOOK, groupId: 'target', items: ['w.other']})
+  const plugins = JSON.stringify(config.plugins)
+  assert.equal(Layout.transfer(config, NOOK, 'w.one', 'source', 'target', 0), true)
+  same(config.bar.layout.left[1].items, [{id: 'w.one', setting: 'retained'}, 'w.other'])
+  same(config.bar.layout.right[1].items, [])
+  assert.equal(JSON.stringify(config.plugins), plugins)
+  const before = JSON.stringify(config)
+  assert.equal(Layout.transfer(config, NOOK, 'w.one', 'target', 'missing', 0), false)
+  assert.equal(Layout.transfer(config, NOOK, 'w.one', 'target', 'target', 0), false)
+  assert.equal(JSON.stringify(config), before)
+}
+console.log('exact bar placement and group transfer passed')

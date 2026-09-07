@@ -136,7 +136,7 @@ BarWidget {
   }
 
   readonly property bool expanded: latched || openChildCount > 0 || dropHovered
-    || draggingChild || hoverHeld || hoverGrace
+    || draggingChild || incomingGroup !== null || hoverHeld || hoverGrace
 
   property real revealProgress: expanded && entries.length > 0 ? 1 : 0
   Behavior on revealProgress {
@@ -183,7 +183,7 @@ BarWidget {
   function closeOtherGroups() {
     var peers = groupPeers()
     for (var i = 0; i < peers.length; i++) {
-      if (peers[i] && peers[i] !== root && peers[i].groupId !== groupId && peers[i].expanded)
+      if (peers[i] && peers[i] !== root && peers[i].groupId !== groupId && peers[i].expanded && !peers[i].draggingChild)
         peers[i].close()
     }
   }
@@ -203,6 +203,9 @@ BarWidget {
 
     function status(): string {
       return JSON.stringify({
+        childTooltipVisible: childTooltip.visible,
+        childTooltipText: childTooltip.visible && root.bar ? root.bar.tooltipText : "",
+        dragging: root.draggingChild,
         groupId: root.groupId,
         label: root.groupLabel,
         trigger: root.trigger,
@@ -330,8 +333,8 @@ BarWidget {
     var across = vertical ? sceneX : sceneY
     var barThickness = vertical ? barWindow.width : barWindow.height
     var pastBar = barPosition === "top" || barPosition === "left"
-      ? across > barThickness
-      : across < 0
+      ? across >= barThickness && across <= barThickness + stripThickness
+      : across <= 0 && across >= -stripThickness
     return pastBar && along >= cardAlong && along <= cardAlong + cardExtent
   }
 
@@ -398,6 +401,91 @@ BarWidget {
   property int draggingIndex: -1
   property int caretIndex: -1
   property bool draggingOutside: false
+  property point childDragPoint: Qt.point(-1, -1)
+  property var childDropGroup: null
+  property var childDropBar: null
+
+  readonly property bool anyGroupDragging: groupPeers().some(function(peer) { return peer && peer.draggingChild })
+  readonly property var incomingGroup: {
+    var peers = groupPeers()
+    for (var i = 0; i < peers.length; i++) {
+      var peer = peers[i]
+      if (peer && peer !== root && peer.draggingChild && peer.childDropGroup === root) return peer
+    }
+    return null
+  }
+  onIncomingGroupChanged: if (!incomingGroup && !draggingChild) caretIndex = -1
+
+  function groupAtPoint(point) {
+    var peers = groupPeers()
+    for (var i = 0; i < peers.length; i++) {
+      var peer = peers[i]
+      if (!peer || peer === root || peer.barWindow !== barWindow) continue
+      var along = vertical ? point.y : point.x
+      var across = vertical ? point.x : point.y
+      var onButton = along >= peer.chevronAlong && along <= peer.chevronAlong + peer.chevronExtent
+        && across >= 0 && across <= barSize
+      if (onButton || (peer.expanded && peer.withinCard(point.x, point.y))) return peer
+    }
+    return null
+  }
+
+  // The bar normalizes the tray position and splits the center into separate
+  // rows. Resolve a visible slot back to the saved entry by ID occurrence.
+  function slotLayoutIndex(slot) {
+    if (!slot || !bar || !shellConfig || !shellConfig.bar) return -1
+    var candidates = bar.moduleSlots.filter(function(peer) {
+      return peer && peer.region === slot.region && peer.moduleName === slot.moduleName
+        && bar.slotWindow(peer) === barWindow
+    })
+    candidates.sort(function(a, b) {
+      var pa = a.mapToItem(null, 0, 0)
+      var pb = b.mapToItem(null, 0, 0)
+      return vertical ? pa.y - pb.y : pa.x - pb.x
+    })
+    var occurrence = candidates.indexOf(slot)
+    if (occurrence < 0) return -1
+    var entries = shellConfig.bar.layout[slot.region] || []
+    for (var i = 0; i < entries.length; i++) {
+      if (Layout.entryIdOf(entries[i]) !== slot.moduleName) continue
+      if (occurrence-- === 0) return i
+    }
+    return -1
+  }
+
+  function barDestinationAt(point) {
+    if (!bar || !barWindow) return null
+    var along = vertical ? point.y : point.x
+    var across = vertical ? point.x : point.y
+    if (across < 0 || across > barSize) return null
+    var slots = bar.moduleSlots.filter(function(slot) {
+      return slot && slot.visible && slot.width > 0 && slot.height > 0
+        && bar.slotWindow(slot) === barWindow
+    })
+    var best = null
+    var distance = Infinity
+    for (var i = 0; i < slots.length; i++) {
+      var slot = slots[i]
+      var position = slot.mapToItem(barWindow.contentItem, 0, 0)
+      var start = vertical ? position.y : position.x
+      var size = vertical ? slot.height : slot.width
+      var before = Math.abs(along - start)
+      var after = Math.abs(along - start - size)
+      // Shared edges belong to the following widget. The tray is moved by the
+      // host, so "after tray" in the raw config can be far from this edge.
+      if (before <= distance + 0.5) {
+        best = {slot: slot, after: false}
+        distance = before
+      }
+      if (after < distance - 0.5) {
+        best = {slot: slot, after: true}
+        distance = after
+      }
+    }
+    if (!best) return null
+    var index = slotLayoutIndex(best.slot)
+    return index < 0 ? null : {section: best.slot.region, index: index + (best.after ? 1 : 0)}
+  }
 
   readonly property bool draggingChild: draggingIndex >= 0
 
@@ -424,24 +512,50 @@ BarWidget {
   }
 
   function updateChildDrag(scenePoint) {
+    var global = strip.contentItem.mapToGlobal(scenePoint.x, scenePoint.y)
+    childDragPoint = barWindow.contentItem.mapFromGlobal(global.x, global.y)
+    var previous = childDropGroup
+    childDropGroup = groupAtPoint(childDragPoint)
+    if (previous && previous !== childDropGroup) previous.caretIndex = -1
     draggingOutside = draggedOntoBar(scenePoint)
-    caretIndex = draggingOutside ? -1 : insertionIndexAt(vertical ? scenePoint.y : scenePoint.x)
+    childDropBar = !childDropGroup && draggingOutside ? barDestinationAt(childDragPoint) : null
+    if (childDropGroup) {
+      childDropGroup.caretIndex = childDropGroup.withinCard(childDragPoint.x, childDragPoint.y)
+        ? childDropGroup.insertionIndexAt(vertical ? childDragPoint.y : childDragPoint.x) : -1
+    }
+    var across = vertical ? scenePoint.x : scenePoint.y
+    var start = vertical ? cardArea.x : cardArea.y
+    caretIndex = !childDropGroup && !draggingOutside && across >= start - ejectMargin
+      && across <= start + stripThickness
+      ? insertionIndexAt(vertical ? scenePoint.y : scenePoint.x) : -1
   }
 
   function endChildDrag() {
     var from = draggingIndex
     var caret = caretIndex
-    var outside = draggingOutside
+    var target = childDropGroup
+    var destination = childDropBar
+    var targetIndex = target ? target.caretIndex : -1
     var entry = from >= 0 && from < entries.length ? entries[from] : null
+    var targetId = target ? target.groupId : ""
 
     cancelChildDrag()
     if (!entry) return
-
-    if (outside) eject(entry.id)
-    else if (caret >= 0) reorder(from, caret)
+    if (target) {
+      mutate(function(config) {
+        Layout.transfer(config, root.moduleName, entry.id, root.groupId, targetId, targetIndex)
+      })
+    } else if (destination) {
+      mutate(function(config) {
+        Layout.eject(config, root.moduleName, entry.id, root.widgetOnly(entry.id), root.groupId, destination)
+      })
+    } else if (caret >= 0) reorder(from, caret)
   }
 
   function cancelChildDrag() {
+    if (childDropGroup) childDropGroup.caretIndex = -1
+    childDropGroup = null
+    childDropBar = null
     draggingIndex = -1
     caretIndex = -1
     draggingOutside = false
@@ -643,12 +757,60 @@ BarWidget {
   }
 
 
+  PopupWindow {
+    id: childTooltip
+    readonly property var target: root.bar ? root.bar.tooltipTarget : null
+    visible: root.revealed && !root.anyGroupDragging && root.bar && root.bar.tooltipShown === true
+      && target && root.bar.targetBelongsToWindow(target, strip)
+    color: "transparent"
+    implicitWidth: Math.ceil(childTooltipBubble.implicitWidth)
+    implicitHeight: Math.ceil(childTooltipBubble.implicitHeight)
+    mask: Region {}
+    anchor {
+      id: childTooltipAnchor
+      window: strip
+      adjustment: PopupAdjustment.Slide
+      edges: Edges.Top | Edges.Left
+      gravity: Edges.Bottom | Edges.Right
+      rect.width: 1
+      rect.height: 1
+      onAnchoring: {
+        if (!childTooltip.target) return
+        var x = childTooltip.target.width / 2 - childTooltip.width / 2
+        var y = childTooltip.target.height + 6
+        if (root.barPosition === "bottom") y = -childTooltip.height - 6
+        else if (root.barPosition === "left") { x = childTooltip.target.width + 6; y = (childTooltip.target.height - childTooltip.height) / 2 }
+        else if (root.barPosition === "right") { x = -childTooltip.width - 6; y = (childTooltip.target.height - childTooltip.height) / 2 }
+        var point = strip.contentItem.mapFromItem(childTooltip.target, x, y)
+        childTooltipAnchor.rect.x = Math.round(point.x)
+        childTooltipAnchor.rect.y = Math.round(point.y)
+      }
+    }
+    BorderSurface {
+      id: childTooltipBubble
+      implicitWidth: childTooltipLabel.implicitWidth + 20
+      implicitHeight: childTooltipLabel.implicitHeight + 14
+      color: Color.tooltip.background
+      borderSpec: Border.surfaceSpec("tooltip", "border", Color.tooltip.border, 1)
+      radius: Style.cornerRadius
+      Text {
+        id: childTooltipLabel
+        anchors.centerIn: parent
+        textFormat: Text.PlainText
+        text: root.bar ? root.bar.tooltipText : ""
+        color: Color.tooltip.text
+        font.family: root.bar ? root.bar.fontFamily : Style.font.family
+        font.pixelSize: Style.font.body
+      }
+    }
+  }
+
   // A separate surface preserves the strip's thickness, which child panels use
   // for anchoring. The bar and card remain input holes so hover and native
   // widget clicks keep working. Child panels own dismissal while they are open.
   Variants {
-    model: root.expanded && root.openChildCount === 0 && !root.draggingChild
-      ? Quickshell.screens : []
+    model: root.expanded && root.openChildCount === 0 && !root.anyGroupDragging
+      && !(root.bar && root.bar.barDragSource) ? Quickshell.screens : []
     delegate: Component {
       PanelWindow {
         required property var modelData
@@ -1205,9 +1367,12 @@ BarWidget {
       grabPermissions: PointerHandler.CanTakeOverFromAnything
 
       onActiveChanged: {
-        if (active) root.beginChildDrag(cell)
-        else root.endChildDrag()
+        if (active) {
+          root.beginChildDrag(cell)
+          root.updateChildDrag(centroid.scenePosition)
+        } else root.endChildDrag()
       }
+      onCanceled: root.cancelChildDrag()
 
       onCentroidChanged: if (active) root.updateChildDrag(centroid.scenePosition)
     }

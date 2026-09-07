@@ -139,15 +139,37 @@ function absorb(config, moduleName, id, index, plugin, groupId) {
   return true
 }
 
-// `widgetOnly` decides whether this id's plugins[] entry is safe to fold in.
-function eject(config, moduleName, id, widgetOnly, groupId) {
+// A destination index refers to the existing bar layout, before insertion.
+function eject(config, moduleName, id, widgetOnly, groupId, destination) {
   var found = findDrawerEntry(config.bar.layout, moduleName, groupId)
   if (!found) return false
+  var section = destination ? destination.section : found.section
+  var index = destination ? destination.index : found.index + 1
+  var list = config.bar.layout[section]
+  if (!Array.isArray(list) || !Number.isInteger(index) || index < 0 || index > list.length) return false
   if (widgetOnly) reclaim(config, found.entry, id)
   var moved = takeFromItems(found.entry, id)
   if (!moved) return false
-  config.bar.layout[found.section].splice(found.index + 1, 0, moved)
+  list.splice(index, 0, moved)
   unmarkEnabled(config, id)
+  return true
+}
+
+// Both groups are resolved before anything is removed. Settings and enablement
+// travel with the same entry; no intermediate bar placement is persisted.
+function transfer(config, moduleName, id, fromGroup, toGroup, index) {
+  if (fromGroup === toGroup) return false
+  var from = findDrawerEntry(config.bar.layout, moduleName, fromGroup)
+  var to = findDrawerEntry(config.bar.layout, moduleName, toGroup)
+  if (!from || !to) return false
+  var targetItems = Array.isArray(to.entry.items) ? to.entry.items : []
+  if (targetItems.some(function(entry) { return entryIdOf(entry) === id })) return false
+  var moved = takeFromItems(from.entry, id)
+  if (!moved) return false
+  to.entry.items = targetItems
+  var slots = hostableIndexes(to.entry.items, moduleName)
+  var at = index >= 0 && index < slots.length ? slots[index] : to.entry.items.length
+  to.entry.items.splice(at, 0, moved)
   return true
 }
 
