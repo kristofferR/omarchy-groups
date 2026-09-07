@@ -107,7 +107,25 @@ def main():
         clock_section = next(section for section, entries in config()['bar']['layout'].items()
                              if any(e['id'] == 'omarchy.clock' for e in entries))
         clock = d.geometry()['omarchy.clock']
-        mouse.drag(d.item_center(d.geometry()[PROBE]), (clock['x'] + 2, 13))
+        start = d.item_center(d.geometry()[PROBE])
+        end = (round(clock['x'] + 2), 13)
+        mouse.move(start)
+        mouse.send(('d',), ('s',250))
+        middle = (round(start[0] - 45), round(start[1]))
+        mouse.glide(start, middle)
+        wait(lambda: state(DEST)['dragFeedback']['imageReady'], 'drag image captured')
+        feedback = state(DEST)['dragFeedback']
+        assert abs(feedback['x'] - middle[0]) <= 1 and abs(feedback['y'] - middle[1]) <= 1
+        assert feedback['marker'] is None, 'no bar insertion marker over the drawer'
+        mouse.glide(middle, end)
+        feedback = state(DEST)['dragFeedback']
+        assert abs(feedback['x'] - end[0]) <= 1 and abs(feedback['y'] - end[1]) <= 1
+        marker = feedback['marker']
+        assert marker and abs(marker['x'] + marker['width']/2 - clock['x']) <= 1
+        capture = os.environ.get('NOOK_DRAG_CAPTURE')
+        if capture:
+            d.sh('grim', '-g', f'{end[0]-100},0 240x90', capture)
+        mouse.send(('u',), ('s',500))
         wait(lambda: PROBE not in ids(DEST), 'group to exact bar slot')
         section = config()['bar']['layout'][clock_section]
         probe_index = next(i for i,e in enumerate(section) if e['id'] == PROBE)
@@ -116,6 +134,7 @@ def main():
         print('group → precise bar slot, settings retained', flush=True)
 
         wait(lambda: d.geometry()[PROBE]['y'] < 26, 'probe reconstructed on bar')
+        assert state(DEST)['dragFeedback'] is None
         mouse.drag(d.center(d.geometry()[PROBE]), gpoint(DEST))
         wait(lambda: PROBE in ids(DEST), 'bar back into group')
         mouse.move((700,300), dwell=400)

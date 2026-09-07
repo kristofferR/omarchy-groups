@@ -28,15 +28,19 @@ Optional real-pointer drag tests require `tests/tools/vptr/build.sh` and
 restore the live layout, so run them only while the pointer is free.
 
 `uv run --no-project python tests/interactions.test.py` uses a temporary harmless
-widget to check bar-to-group dragging, group-to-group transfer, precise bar drop
-placement, cancellation, and native tooltip/right-click behavior. It restores the
+widget to check bar-to-group dragging, group-to-group transfer, cursor-following
+drag images, insertion markers, precise bar drop placement, cancellation, and
+native tooltip/right-click behavior. It restores the
 original configuration and pointer. Set `NOOK_GROUP_ID` and
 `NOOK_TARGET_GROUP_ID` to two existing groups (defaults: `windows` and `input`).
+Set `NOOK_DRAG_CAPTURE` to a PNG path to capture the held drag over the bar.
 
 Nook integrates with Omarchy's bar internals rather than a stable hosting API.
 On shells with scoped plugin APIs, Groups resolves the containing bar through a
 first-party widget on the same bar, such as the menu or clock. Keep at least one
 such widget present. Hosted third-party widgets retain their scoped APIs.
+Drags out of drawers use the bar's ghost overlay and target hit testing; Groups
+commits the move because the source entry belongs to a drawer's item list.
 Top-bar behavior is the supported and verified configuration here. Some widgets
 hide themselves when idle or when hardware is absent; their slots are still
 loaded. Widgets retain their own tooltip and status behavior. The group trigger

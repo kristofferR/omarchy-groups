@@ -241,6 +241,12 @@ BarWidget {
         childTooltipVisible: childTooltip.visible,
         childTooltipText: childTooltip.visible && root.bar ? root.bar.tooltipText : "",
         dragging: root.draggingChild,
+        dragFeedback: root.draggingChild && root.bar ? {
+          imageReady: String(root.bar.barDragImageUrl) !== "",
+          x: root.bar.barDragScreenX, y: root.bar.barDragScreenY,
+          offsetX: root.bar.barDragOffsetX, offsetY: root.bar.barDragOffsetY,
+          marker: root.bar.barDragTargetGeometry
+        } : null,
         groupId: root.groupId,
         label: root.groupLabel,
         trigger: root.trigger,
@@ -348,7 +354,7 @@ BarWidget {
   // here would only park the entry beside the chevron.
 
   readonly property bool dragActive: !isManager && bar && bar.barDragSource !== null
-    && bar.barDragSource !== ownSlot && !draggingChild
+    && bar.barDragSource !== ownSlot && !anyGroupDragging
   // Without this both monitors' drawers would light up.
   readonly property bool dragInThisWindow: dragActive && bar.barDragWindow
     && barWindow === bar.barDragWindow
@@ -434,6 +440,7 @@ BarWidget {
 
 
   property int draggingIndex: -1
+  property var childDragSlot: null
   property int caretIndex: -1
   property bool draggingOutside: false
   property point childDragPoint: Qt.point(-1, -1)
@@ -490,45 +497,34 @@ BarWidget {
 
   function barDestinationAt(point) {
     if (!bar || !barWindow) return null
-    var along = vertical ? point.y : point.x
-    var across = vertical ? point.x : point.y
-    if (across < 0 || across > barSize) return null
-    var slots = bar.moduleSlots.filter(function(slot) {
-      return slot && slot.visible && slot.width > 0 && slot.height > 0
-        && bar.slotWindow(slot) === barWindow
-    })
-    var best = null
-    var distance = Infinity
-    for (var i = 0; i < slots.length; i++) {
-      var slot = slots[i]
-      var position = slot.mapToItem(barWindow.contentItem, 0, 0)
-      var start = vertical ? position.y : position.x
-      var size = vertical ? slot.height : slot.width
-      var before = Math.abs(along - start)
-      var after = Math.abs(along - start - size)
-      // Shared edges belong to the following widget. The tray is moved by the
-      // host, so "after tray" in the raw config can be far from this edge.
-      if (before <= distance + 0.5) {
-        best = {slot: slot, after: false}
-        distance = before
-      }
-      if (after < distance - 0.5) {
-        best = {slot: slot, after: true}
-        distance = after
-      }
-    }
-    if (!best) return null
-    var index = slotLayoutIndex(best.slot)
-    return index < 0 ? null : {section: best.slot.region, index: index + (best.after ? 1 : 0)}
+    // Use the native hit testing, with the bar window as the coordinate space.
+    // Passing the hosted proxy would instead restrict the search to its drawer.
+    var drop = bar.moduleDropAtScene(point, null)
+    if (!drop) return null
+    var index = slotLayoutIndex(drop.slot)
+    return index < 0 ? null : {section: drop.slot.region,
+      index: index + (drop.after ? 1 : 0), slot: drop.slot, after: drop.after}
   }
 
   readonly property bool draggingChild: draggingIndex >= 0
 
-  function beginChildDrag(cell) {
-    if (!cell) return
+  function beginChildDrag(cell, pressPoint) {
+    if (!cell || !barWindow || !bar || typeof bar.captureBarDragGhost !== "function"
+        || typeof bar.moduleDropAtScene !== "function") return
     draggingIndex = cell.index
+    childDragSlot = cell.nativeDragSlot
     caretIndex = -1
     draggingOutside = false
+    // Share the stock bar's overlay ghost and insertion marker. Keep the real
+    // widget in its drawer so its pointer grab and native actions stay intact.
+    bar.clearBarDrag()
+    bar.clearTooltip()
+    bar.barDragWindow = barWindow
+    bar.barDragScreen = barWindow.screen
+    bar.barDragOffsetX = pressPoint.x
+    bar.barDragOffsetY = pressPoint.y
+    bar.barDragSource = childDragSlot
+    bar.captureBarDragGhost(childDragSlot)
   }
 
   // The card's edge is flush against the bar, so testing the card's rectangle
@@ -547,6 +543,7 @@ BarWidget {
   }
 
   function updateChildDrag(scenePoint) {
+    if (!draggingChild || !bar || bar.barDragSource !== childDragSlot) return
     var global = strip.contentItem.mapToGlobal(scenePoint.x, scenePoint.y)
     childDragPoint = barWindow.contentItem.mapFromGlobal(global.x, global.y)
     var previous = childDropGroup
@@ -563,6 +560,16 @@ BarWidget {
     caretIndex = !childDropGroup && !draggingOutside && across >= start - ejectMargin
       && across <= start + stripThickness
       ? insertionIndexAt(vertical ? scenePoint.y : scenePoint.x) : -1
+
+    var screenPoint = bar.barDragScreenPoint(childDragPoint)
+    bar.barDragSceneX = childDragPoint.x
+    bar.barDragSceneY = childDragPoint.y
+    bar.barDragScreenX = screenPoint.x
+    bar.barDragScreenY = screenPoint.y
+    bar.barDragTarget = childDropBar ? childDropBar.slot : null
+    bar.barDragAfter = childDropBar ? childDropBar.after : false
+    bar.barDragTargetGeometry = childDropBar
+      ? bar.dropMarkerRect(childDropBar.slot, childDropBar.after) : null
   }
 
   function endChildDrag() {
@@ -588,6 +595,8 @@ BarWidget {
   }
 
   function cancelChildDrag() {
+    if (childDragSlot && bar && bar.barDragSource === childDragSlot) bar.clearBarDrag()
+    childDragSlot = null
     if (childDropGroup) childDropGroup.caretIndex = -1
     childDropGroup = null
     childDropBar = null
@@ -1143,6 +1152,7 @@ BarWidget {
       return registered ? registered.component : null
     }
     readonly property var childItem: cell.customType === "qml" ? qmlLoader.item : childLoader.item
+    readonly property var nativeDragSlot: proxySlot
     readonly property bool dragSource: root.draggingIndex === cell.index
 
     // Uninstalled: take up no room while the removal is written out.
@@ -1409,7 +1419,7 @@ BarWidget {
 
       onActiveChanged: {
         if (active) {
-          root.beginChildDrag(cell)
+          root.beginChildDrag(cell, centroid.pressPosition)
           root.updateChildDrag(centroid.scenePosition)
         } else root.endChildDrag()
       }
