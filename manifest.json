@@ -6,10 +6,12 @@
   "author": "Katsari, kristofferR",
   "description": "Independent icon groups with drawers below the bar, based on Nook.",
   "kinds": [
-    "bar-widget"
+    "bar-widget",
+    "overlay"
   ],
   "entryPoints": {
-    "barWidget": "BarWidget.qml"
+    "barWidget": "BarWidget.qml",
+    "overlay": "Settings.qml"
   },
   "barWidget": {
     "displayName": "Groups",
@@ -64,5 +66,6 @@
       }
     ]
   },
-  "license": "MIT"
+  "license": "MIT",
+  "icon": "assets/icon.svg"
 }

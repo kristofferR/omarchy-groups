@@ -2,6 +2,7 @@
 
 // Fixed viewboxes avoid Nerd Font glyph bearings shifting icons off center.
 var paths = {
+  "manager": "<rect x=\"2\" y=\"3\" width=\"20\" height=\"4\" rx=\"1\"/><path d=\"M6 7v4m12-4v4\"/><rect x=\"2\" y=\"11\" width=\"8\" height=\"9\" rx=\"2\"/><rect x=\"14\" y=\"11\" width=\"8\" height=\"9\" rx=\"2\"/>",
   "windows": "<rect x=\"3\" y=\"4\" width=\"18\" height=\"16\" rx=\"2\"/><path d=\"M3 9h18M9 9v11\"/>",
   "development": "<path d=\"m8 6-6 6 6 6m8-12 6 6-6 6m-3-14-2 16\"/>",
   "input": "<rect x=\"2\" y=\"5\" width=\"20\" height=\"14\" rx=\"2\"/><path d=\"M5 9h1m3 0h1m3 0h1m3 0h1M5 13h1m3 0h1m3 0h1m3 0h1M7 16h10\"/>",

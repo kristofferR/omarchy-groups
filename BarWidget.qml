@@ -23,9 +23,10 @@ BarWidget {
   // Read `settings` directly, not through the base class's setting(): the host
   // assigns it after construction, and a binding that reaches it through a helper
   // call never re-evaluates when that lands.
+  readonly property bool isManager: settings && settings.role === "manager"
   readonly property string groupId: settings && settings.groupId ? String(settings.groupId) : ""
   readonly property string groupLabel: settings && settings.label ? String(settings.label) : "Group"
-  readonly property string groupIcon: settings && settings.icon ? String(settings.icon) : "group"
+  readonly property string groupIcon: isManager ? "manager" : (settings && settings.icon ? String(settings.icon) : "group")
 
   readonly property var itemsSetting: settings ? settings.items : null
   readonly property var entries: Layout.normalizeEntries(itemsSetting, moduleName)
@@ -111,7 +112,7 @@ BarWidget {
   property int openChildCount: 0
 
   readonly property bool pointerOnDrawer: pointerInside || cardHover.hovered
-  readonly property bool hoverHeld: trigger === "hover" && !hoverSuppressed && pointerOnDrawer
+  readonly property bool hoverHeld: !isManager && trigger === "hover" && !hoverSuppressed && pointerOnDrawer
   // The pointer is over neither while crossing from chevron to strip.
   property bool hoverGrace: false
 
@@ -156,7 +157,11 @@ BarWidget {
   // widget that reports all three, so without `opened` those are silent no-ops.
   readonly property bool opened: expanded
 
-  function open() { latched = true }
+  function openSettings() {
+    close()
+    if (bar && bar.shell) bar.shell.summon(moduleName, "")
+  }
+  function open() { if (isManager) openSettings(); else latched = true }
   function close() {
     latched = false
     hoverSuppressed = pointerOnDrawer
@@ -169,7 +174,8 @@ BarWidget {
   }
 
   function groupPeers() {
-    return bar && typeof bar.moduleWidgets === "function" ? bar.moduleWidgets(moduleName) : [root]
+    return bar && typeof bar.moduleWidgets === "function"
+      ? bar.moduleWidgets(moduleName).filter(function(peer) { return peer && !peer.isManager }) : [root]
   }
 
   function broadcastGroup(method) {
@@ -312,7 +318,7 @@ BarWidget {
   // Bar.qml commits its own reorder and knows nothing about drawers, so a drop
   // here would only park the entry beside the chevron.
 
-  readonly property bool dragActive: bar && bar.barDragSource !== null
+  readonly property bool dragActive: !isManager && bar && bar.barDragSource !== null
     && bar.barDragSource !== ownSlot && !draggingChild
   // Without this both monitors' drawers would light up.
   readonly property bool dragInThisWindow: dragActive && bar.barDragWindow
@@ -739,12 +745,12 @@ BarWidget {
     }
     active: root.dropHovered || root.expanded
     activeColor: Color.accent          // `active` defaults to bar.urgent, kept for urgency
-    tooltipText: root.trigger === "hover" || root.expanded
+    tooltipText: root.isManager ? "Groups settings" : root.trigger === "hover" || root.expanded
       ? "" : root.groupLabel + " · " + root.entries.length + " plugins"
     // Tests `latched`, not `expanded`: hovering already makes it expanded, so
     // branching on that meant a click could only ever close it.
     onPressed: function(button) {
-      if (button === Qt.RightButton) return
+      if (root.isManager || button === Qt.RightButton) { root.openSettings(); return }
       if (root.latched) {
         root.latched = false
         root.hoverSuppressed = true

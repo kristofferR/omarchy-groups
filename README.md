@@ -58,6 +58,20 @@ supported, but named groups are required for multiple instances. Configure group
 entries directly in `shell.json`: the stock settings editor searches by plugin
 ID, so it cannot reliably distinguish multiple instances of any plugin.
 
+## Settings
+
+Right-click any group to open the shared Groups settings panel. It shows the
+current names, icons, positions, and item counts. Group editing will be added
+here later. Escape, Done, or a click outside closes it.
+
+An optional dedicated bar shortcut uses
+`{"id":"kristofferr.groups","groupId":"settings","role":"manager"}`.
+It opens settings instead of a drawer and is excluded from group membership.
+The plugin also provides its own icon through the manifest.
+
+Open the same panel from a command with
+`omarchy-shell shell summon kristofferr.groups`.
+
 ## Controls
 
 ```sh
