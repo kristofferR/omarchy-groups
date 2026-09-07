@@ -1,136 +1,109 @@
-# Nook
+# Groups for Omarchy
 
-A bar drawer for Omarchy, for when too many plugins have cluttered your bar.
-Collapse the ones you rarely touch into a tray that opens below the bar rather
-than along it, so nothing on the bar gets covered or moved. Drag widgets in and
-out.
+Independent, named icon groups that open directly below the bar. A fork of
+[Katsari/Nook](https://github.com/Katsari/nook), based on version 1.1.2.
+The existing widget hosting, panel anchoring, scrolling and drag handling come
+from Nook. The MIT license and upstream history are preserved.
 
-![Nook open, with several widgets in the tray](preview.png)
+Each group has a boxed icon, a name on hover, and a unique `groupId`. Opening a
+group closes the previous group and its open child panel. The bar stays one row:
+opening a drawer does not move any bar icons. Hover opens the drawer; click pins
+it; click again closes it. Clicking outside, including empty bar space, dismisses
+the group. A child's panel keeps its drawer open while in use; dismissing that
+panel closes its group too. Widgets of different heights are centered in the drawer.
+Reveal animation is off by default.
 
-## Install
+## Local development and installation
 
 ```sh
-omarchy plugin add https://github.com/Katsari/nook.git --enable
+bash tests/all.sh
+./install-local.sh
 ```
 
-## Usage
+The installer validates and copies the runtime files into
+`~/.config/omarchy/plugins/kristofferr.groups`, then restarts the shell once to clear cached hosted QML components. It does not
+change the layout. Edit this checkout and rerun the installer to deploy changes;
+the installed copy is deliberately not managed by upstream plugin updates.
 
-Hover the chevron to open the tray. Click it to pin the tray open, and click
-again to put it away. Click a widget inside to use it as you would on the bar.
-
-Drag a widget off the bar onto the chevron to file it away, drag one inside the
-tray to reorder it, and drag one out to put it back on the bar. A caret marks
-where it will land. A press too short to become a drag stays a click.
-
-Every move rewrites `~/.config/omarchy/shell.json`.
-
-## Settings
-
-Settings live on Nook's `bar.layout` entry in `~/.config/omarchy/shell.json`.
-
-| Key        | Default   | Meaning                                                         |
-| ---------- | --------- | --------------------------------------------------------------- |
-| `items`    | `[]`      | The widgets inside, as layout entries                           |
-| `trigger`  | `"hover"` | `"hover"` opens on pointer-over; anything else means click-only |
-| `duration` | `180`     | Reveal animation, in milliseconds                               |
-
-The tray's layer surface is named `nook`, for Hyprland layer rules.
-
-Custom modules work too. An entry with `exec` runs its command on an interval
-and shows the output, the same as on the bar; one with `source` loads that QML
-file. Neither is a plugin, so neither needs a `plugins[]` entry.
-
-Each item takes the same shape as a bar layout entry, so per-widget settings go
-on the item:
+Add any number of entries to `bar.layout.left`, `center`, or `right`:
 
 ```json
 {
-  "id": "io.github.katsari.nook",
+  "id": "kristofferr.groups",
+  "groupId": "devices",
+  "label": "Connections & devices",
+  "icon": "devices",
   "trigger": "hover",
+  "duration": 0,
   "items": [
-    { "id": "some.widget" },
-    { "id": "another.widget", "format": "short" }
+    { "id": "omarchy.bluetooth" },
+    { "id": "omarchy.tailscale" }
   ]
 }
 ```
 
-Editing `items` by hand needs a second step: add each widget to the top-level
-`plugins[]` array as well, or it stays disabled and never renders. Dragging
-does both for you.
+Also keep hosted plugins enabled through top-level `plugins` entries, for example
+`{"id":"omarchy.bluetooth"}`. Preserve existing service settings on those entries.
+The drawer's absorb/eject commands manage enablement automatically. Per-widget
+layout settings stay with the widget when it moves.
 
-## Commands
+Icon names: `windows`, `development`, `input`, `sound`, `devices`, `display`,
+`appearance`, `maintenance`, or `group`. SVGs use a fixed viewbox and centered
+14-pixel image in a 28-pixel slot so glyph bearings cannot shift them within their buttons.
 
-```bash
-omarchy-shell io.github.katsari.nook toggle            # also: open, close
-omarchy-shell io.github.katsari.nook absorb <id>       # move a widget in
-omarchy-shell io.github.katsari.nook eject <id>        # put one back on the bar
-omarchy-shell io.github.katsari.nook reorder <from> <to>
-omarchy-shell io.github.katsari.nook status            # what it thinks it is doing
-```
+Every group needs a unique, stable `groupId`. Missing or duplicate IDs will never
+silently redirect config edits into a sibling. An unnamed single group remains
+supported, but named groups are required for multiple instances. Configure group
+entries directly in `shell.json`: the stock settings editor searches by plugin
+ID, so it cannot reliably distinguish multiple instances of any plugin.
 
-`reorder` takes positions among the widgets the tray draws, counting from
-zero. `to` is an insertion index measured before the move, so `reorder 0 3`
-puts the first widget third.
-
-Read `status` when a gesture misbehaves: it separates a wrong state from a
-pointer that never arrived.
-
-## Tests
+## Controls
 
 ```sh
-tests/all.sh
+omarchy-shell kristofferr.groups.devices open
+omarchy-shell kristofferr.groups.devices close
+omarchy-shell kristofferr.groups.devices toggle
+omarchy-shell kristofferr.groups.devices status
+omarchy-shell kristofferr.groups.devices absorb omarchy.network
+omarchy-shell kristofferr.groups.devices eject omarchy.network
+omarchy-shell kristofferr.groups.devices reorder 0 2
 ```
 
-GitHub Actions runs the node tests and the source checks on every push. The
-lint and harness legs need the omarchy shell source and a Wayland session, so
-they skip themselves there and only run locally.
+Drag a bar widget onto a group to absorb it, reorder within the drawer, or drag
+it back onto the bar to eject it. To move between groups, eject then absorb.
+Nested groups are intentionally unsupported. Each group's IPC target and config
+writes are independent. Status includes the group identity, live child load
+state, and geometry for diagnostics.
 
-`tests/layoutmodel.test.js` runs every shell.json edit in `LayoutModel.js`
-under node. `tests/qml.test.sh` lints `BarWidget.qml`, checks that the QML and
-the library agree, and loads the real widget in a throwaway quickshell
-instance against a mock bar to drive absorb, reorder, eject, and both
-reconcile paths end to end.
+## Why this base and which separators?
 
-`tests/drag.test.py` drives the real pointer, so it is opt-in:
+Research checked on 2026-09-07:
 
-```sh
-tests/all.sh --drag
-```
+| Option | Fit for this layout |
+| --- | --- |
+| [Nook 1.1.2](https://github.com/Katsari/nook) | Closest fit: actual widgets in an anchored strip below the existing bar. Upstream supports one drawer; this fork adds independent instances. |
+| [Skål Bar](https://github.com/outcrop-labs/skal-bar) | Replaces the full bar with reveal controls for its three regions. More replacement code than needed for several independent drawers. |
+| [OmaBar Drawer](https://github.com/amitcpatel/omabar-drawer) | Full-bar replacement that collapses the right region behind one icon. |
+| [Plugin Drawer](https://github.com/alyayman921/Omarchy-drawer) | Single drawer with a grid/list interface. A different presentation from the small strips wanted here. |
+| [Bar Studio](https://github.com/andreconde21/omarchy-bar-studio) | Layout editor, not a multiple-drawer host. Its tray collapse needs a compatible tray; the stock tray does not display its hosted array. |
+| Stock `omarchy.spacer` | Built-in blank spacing, repeatable with configurable `size`. |
+| [Bar Divider 1.1.0](https://github.com/Rizmi/omarchy-divider-plugin) | Existing repeatable line, dot or pipe separators. Reused unchanged for the live layout. |
 
-It drags a widget off the bar into the drawer, hovers the chevron and checks
-the widget is actually drawn below the bar, then drags it back out. It takes
-over the mouse for about twenty seconds. Build the pointer once with
-`tests/tools/vptr/build.sh`. `shell.json` is snapshotted first and restored at
-the end, pass or fail.
+Example separator: `{"id":"io.github.rizmi.divider","style":"line","margin":5}`.
 
-## Remove
+## Validation and boundaries
 
-```sh
-omarchy plugin remove io.github.katsari.nook
-```
+`tests/all.sh` runs the pure layout tests, Qt 6 lint, manifest validation and a
+Quickshell harness. The harness exercises separate instance config writes,
+settings retention, open/close isolation and sibling closing. Pure tests also
+cover absent/duplicate IDs and every group-scoped mutation.
 
-Whatever the tray held stays in `items` on that entry, so removing Nook while
-it is full leaves those widgets off your bar. Drag them out first, or `eject`
-each one.
+Optional real-pointer drag tests require `tests/tools/vptr/build.sh` and
+`NOOK_GROUP_ID=<group> bash tests/all.sh --drag`. They temporarily modify and
+restore the live layout, so run them only while the pointer is free.
 
-## Known limits
-
-Built for Omarchy 4.0.2. Beyond the widget contract every plugin uses, Nook
-reaches into the bar's widget registry, its slot and click-target bookkeeping,
-and its drag state. No plugin API covers those, so an update can break it.
-
-- **One Nook per bar.** The manifest sets `allowMultiple` false, so the bar
-  will not add a second. A hand-written one would still load, and both would
-  write to the first entry they find.
-- **Bottom and right bars can misroute a bar click.** `Bar.moduleClickTargetAt`
-  maps a click into every registered target's geometry without checking which
-  window the target is in, and on those two edges the tray overlaps the bar's
-  coordinate range. The chevron is covered; other bar widgets are not.
-- **The bar's own tooling does not see inside the tray.** `omarchy bar set`,
-  `omarchy bar move` and `omarchy-shell shell listPlugins` all read
-  `bar.layout`, so a hosted widget reads as absent, and `listPlugins` reports
-  it disabled. Eject it to configure it from the command line.
-- **Panel numbers skip hosted widgets.** `omarchy-shell shell togglePanelAt`
-  counts the panels visible in a bar section, so the tray's contents are not
-  in the count. Toggling a panel by id works: `omarchy-shell shell summon
-<id>` opens the tray and its panel with it.
+Nook integrates with Omarchy's bar internals rather than a stable hosting API.
+Top-bar behavior is the supported and verified configuration here. Some widgets
+hide themselves when idle or when hardware is absent; their slots are still
+loaded. Widgets retain their own tooltip and status behavior. The group trigger
+does not aggregate every plugin's urgency state.

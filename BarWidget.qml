@@ -5,6 +5,7 @@ import Quickshell.Wayland
 import qs.Commons
 import qs.Ui
 import "LayoutModel.js" as Layout
+import "GroupIcons.js" as GroupIcons
 
 // Hosts other bar widgets behind a chevron, in a strip that opens off the bar.
 //
@@ -17,16 +18,20 @@ import "LayoutModel.js" as Layout
 // PluginRegistry.isEnabled never builds them. absorb() and eject() maintain it.
 BarWidget {
   id: root
-  moduleName: "io.github.katsari.nook"
+  moduleName: "kristofferr.groups"
 
   // Read `settings` directly, not through the base class's setting(): the host
   // assigns it after construction, and a binding that reaches it through a helper
   // call never re-evaluates when that lands.
+  readonly property string groupId: settings && settings.groupId ? String(settings.groupId) : ""
+  readonly property string groupLabel: settings && settings.label ? String(settings.label) : "Group"
+  readonly property string groupIcon: settings && settings.icon ? String(settings.icon) : "group"
+
   readonly property var itemsSetting: settings ? settings.items : null
   readonly property var entries: Layout.normalizeEntries(itemsSetting, moduleName)
   readonly property string trigger: settings && settings.trigger ? String(settings.trigger) : "hover"
   readonly property int animationDuration: settings && settings.duration !== undefined
-    ? Math.max(0, Number(settings.duration)) : 180
+    ? Math.max(0, Number(settings.duration)) : 0
 
   readonly property var widgetRegistry: bar && bar.barWidgetRegistry ? bar.barWidgetRegistry.widgets : ({})
   readonly property var pluginRegistry: bar && bar.shell ? bar.shell.pluginRegistry : null
@@ -152,23 +157,54 @@ BarWidget {
   readonly property bool opened: expanded
 
   function open() { latched = true }
-  function close() { latched = false }
-  function toggle() { latched = !latched }
+  function close() {
+    latched = false
+    hoverSuppressed = pointerOnDrawer
+    hoverGrace = false
+    hoverGraceTimer.stop()
+    for (var i = 0; i < cells.length; i++) {
+      var child = cells[i] ? cells[i].childItem : null
+      if (child && child.opened && typeof child.close === "function") child.close()
+    }
+  }
+
+  function groupPeers() {
+    return bar && typeof bar.moduleWidgets === "function" ? bar.moduleWidgets(moduleName) : [root]
+  }
+
+  function broadcastGroup(method) {
+    var peers = groupPeers()
+    for (var i = 0; i < peers.length; i++) {
+      if (peers[i] && peers[i].groupId === groupId && typeof peers[i][method] === "function")
+        peers[i][method]()
+    }
+  }
+
+  function closeOtherGroups() {
+    var peers = groupPeers()
+    for (var i = 0; i < peers.length; i++) {
+      if (peers[i] && peers[i] !== root && peers[i].groupId !== groupId && peers[i].expanded)
+        peers[i].close()
+    }
+  }
+  function toggle() { if (latched) close(); else open() }
 
   IpcHandler {
-    target: "io.github.katsari.nook"
+    target: root.moduleName + (root.groupId ? "." + root.groupId : "")
 
     // One bar surface per monitor, so state changes go to every instance. Config
     // writes do not: shell.json is shared and one write is the whole change.
-    function open(): void { root.broadcast("open") }
-    function close(): void { root.broadcast("close") }
-    function toggle(): void { root.broadcast("toggle") }
+    function open(): void { root.broadcastGroup("open") }
+    function close(): void { root.broadcastGroup("close") }
+    function toggle(): void { root.broadcastGroup("toggle") }
     function absorb(id: string): void { root.absorb(id, -1) }
     function eject(id: string): void { root.eject(id) }
     function reorder(from: string, to: string): void { root.reorder(Number(from), Number(to)) }
 
     function status(): string {
       return JSON.stringify({
+        groupId: root.groupId,
+        label: root.groupLabel,
         trigger: root.trigger,
         hoverHeld: root.hoverHeld,
         latched: root.latched,
@@ -177,7 +213,14 @@ BarWidget {
         hoverSuppressed: root.hoverSuppressed,
         openChildren: root.openChildCount,
         items: root.entries.length,
-        overflowing: root.overflowing
+        overflowing: root.overflowing,
+        x: root.chevronAlong,
+        width: root.implicitWidth,
+        cardStart: root.cardAlong,
+        children: root.cells.map(function(cell) {
+          return cell ? { id: cell.childId, loaded: !!cell.childItem,
+            width: cell.width, opened: cell.childOpen } : null
+        })
       })
     }
   }
@@ -198,7 +241,10 @@ BarWidget {
   property real scrollOffset: 0
 
   onMaxScrollChanged: scrollOffset = Math.max(0, Math.min(scrollOffset, maxScroll))
-  onExpandedChanged: if (!expanded) scrollOffset = 0
+  onExpandedChanged: {
+    if (!expanded) scrollOffset = 0
+    else closeOtherGroups()
+  }
 
   function scrollBy(amount) {
     if (!overflowing) return
@@ -415,7 +461,7 @@ BarWidget {
   // -1 appends.
   function absorb(id, index) {
     var plugin = !root.customTypeOf(root.entryOnBar(id))
-    mutate(function(config) { Layout.absorb(config, root.moduleName, id, index, plugin) })
+    mutate(function(config) { Layout.absorb(config, root.moduleName, id, index, plugin, root.groupId) })
   }
 
   function entryOnBar(id) {
@@ -433,20 +479,20 @@ BarWidget {
   }
 
   function eject(id) {
-    mutate(function(config) { Layout.eject(config, root.moduleName, id, root.widgetOnly(id)) })
+    mutate(function(config) { Layout.eject(config, root.moduleName, id, root.widgetOnly(id), root.groupId) })
   }
 
   function reorder(from, to) {
-    mutate(function(config) { Layout.reorder(config, root.moduleName, from, to) })
+    mutate(function(config) { Layout.reorder(config, root.moduleName, from, to, root.groupId) })
   }
 
   // Both jobs in one write: config refreshes only after a write.
   function reconcile(gone, stranded) {
-    mutate(function(config) { Layout.reconcile(config, root.moduleName, gone, stranded) })
+    mutate(function(config) { Layout.reconcile(config, root.moduleName, gone, stranded, root.groupId) })
   }
 
   readonly property bool configWriter: {
-    var peers = bar && typeof bar.moduleWidgets === "function" ? bar.moduleWidgets(moduleName) : []
+    var peers = groupPeers().filter(function(peer) { return peer && peer.groupId === root.groupId })
     return peers.length === 0 || peers[0] === root
   }
 
@@ -497,20 +543,30 @@ BarWidget {
     id: chevron
     anchors.fill: parent
     bar: root.bar
-    text: {
-      var away = root.barPosition === "top" ? ""
-        : root.barPosition === "bottom" ? ""
-        : root.barPosition === "left" ? "" : ""
-      var back = root.barPosition === "top" ? ""
-        : root.barPosition === "bottom" ? ""
-        : root.barPosition === "left" ? "" : ""
-      return root.expanded ? back : away
+    text: ""
+    labelVisible: false
+    hasVisualContent: true
+    Image {
+      anchors.centerIn: parent
+      width: Style.space(14)
+      height: Style.space(14)
+      sourceSize.width: width * (root.barWindow && root.barWindow.screen ? root.barWindow.screen.devicePixelRatio : 1)
+      sourceSize.height: sourceSize.width
+      source: GroupIcons.source(root.groupIcon, String(chevron.active ? chevron.activeColor : chevron.foreground))
+    }
+    fixedWidth: Style.space(28)
+    Rectangle {
+      anchors.fill: parent
+      anchors.margins: Style.space(4)
+      radius: Style.space(3)
+      color: Qt.alpha(root.hostedForeground, root.expanded ? 0.12 : 0.04)
+      border.width: 1
+      border.color: Qt.alpha(root.hostedForeground, root.expanded ? 0.7 : 0.35)
+      z: -1
     }
     active: root.dropHovered || root.expanded
     activeColor: Color.accent          // `active` defaults to bar.urgent, kept for urgency
-    tooltipText: root.entries.length === 0
-      ? "Nook (empty)"
-      : "Nook (" + root.entries.length + ")"
+    tooltipText: root.groupLabel + " · " + root.entries.length + " plugins"
     // Tests `latched`, not `expanded`: hovering already makes it expanded, so
     // branching on that meant a click could only ever close it.
     onPressed: function(button) {
@@ -527,6 +583,69 @@ BarWidget {
   }
 
 
+  // A separate surface preserves the strip's thickness, which child panels use
+  // for anchoring. The bar and card remain input holes so hover and native
+  // widget clicks keep working. Child panels own dismissal while they are open.
+  Variants {
+    model: root.expanded && root.openChildCount === 0 && !root.draggingChild
+      ? Quickshell.screens : []
+    delegate: Component {
+      PanelWindow {
+        required property var modelData
+        readonly property bool ownScreen: root.barWindow && root.barWindow.screen
+          && modelData.name === root.barWindow.screen.name
+        screen: modelData
+        visible: root.expanded
+        color: "transparent"
+        exclusionMode: ExclusionMode.Ignore
+        WlrLayershell.namespace: "omarchy-group-dismiss-" + root.groupId
+        WlrLayershell.layer: WlrLayer.Top
+        WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
+        anchors { top: true; bottom: true; left: true; right: true }
+        mask: Region {
+          width: modelData.width
+          height: modelData.height
+          Region {
+            intersection: Intersection.Subtract
+            x: root.barPosition === "right" ? modelData.width - root.barSize : 0
+            y: root.barPosition === "bottom" ? modelData.height - root.barSize : 0
+            width: root.vertical ? root.barSize : modelData.width
+            height: root.vertical ? modelData.height : root.barSize
+          }
+          Region {
+            intersection: Intersection.Subtract
+            x: ownScreen ? (root.vertical ? (root.barPosition === "right"
+              ? modelData.width - root.barSize - root.stripThickness : root.barSize) : root.cardAlong) : 0
+            y: ownScreen ? (root.vertical ? root.cardAlong : (root.barPosition === "bottom"
+              ? modelData.height - root.barSize - root.stripThickness : root.barSize)) : 0
+            width: ownScreen ? cardArea.width : 0
+            height: ownScreen ? cardArea.height : 0
+          }
+        }
+        MouseArea {
+          anchors.fill: parent
+          acceptedButtons: Qt.AllButtons
+          onPressed: root.close()
+        }
+      }
+    }
+  }
+
+  // Observe a bar press, then reject it so the native widget still receives it.
+  MouseArea {
+    parent: root.barWindow ? root.barWindow.contentItem : null
+    anchors.fill: parent
+    z: 10000
+    enabled: root.expanded
+    acceptedButtons: Qt.AllButtons
+    onPressed: function(mouse) {
+      var along = root.vertical ? mouse.y : mouse.x
+      if (along < root.chevronAlong || along > root.chevronAlong + root.chevronExtent)
+        root.close()
+      mouse.accepted = false
+    }
+  }
+
   PanelWindow {
     id: strip
 
@@ -535,7 +654,7 @@ BarWidget {
     color: "transparent"
     surfaceFormat.opaque: false
     exclusionMode: ExclusionMode.Ignore
-    WlrLayershell.namespace: "nook"
+    WlrLayershell.namespace: "omarchy-group-" + root.groupId
     WlrLayershell.layer: WlrLayer.Top
     WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
 
@@ -630,12 +749,13 @@ BarWidget {
           id: itemsRow
           visible: !root.vertical
           spacing: 0
-          x: -root.scrollOffset
+          x: Math.max(0, (parent.width - implicitWidth) / 2) - root.scrollOffset
           anchors.verticalCenter: parent.verticalCenter
 
           Repeater {
             model: root.vertical ? [] : root.entries
             DrawerItem {
+              anchors.verticalCenter: parent.verticalCenter
               required property var modelData
               required property int index
               entry: modelData
@@ -648,12 +768,13 @@ BarWidget {
           id: itemsColumn
           visible: root.vertical
           spacing: 0
-          y: -root.scrollOffset
+          y: Math.max(0, (parent.height - implicitHeight) / 2) - root.scrollOffset
           anchors.horizontalCenter: parent.horizontalCenter
 
           Repeater {
             model: root.vertical ? root.entries : []
             DrawerItem {
+              anchors.horizontalCenter: parent.horizontalCenter
               required property var modelData
               required property int index
               entry: modelData
@@ -827,7 +948,11 @@ BarWidget {
     onHostChanged: inject()
 
     property bool childOpen: childItem && childItem.opened === true
-    onChildOpenChanged: root.noteChildOpen(!childOpen, childOpen)
+    onChildOpenChanged: {
+      root.noteChildOpen(!childOpen, childOpen)
+      // A child dismissed by an outside click must not leave a pinned drawer.
+      if (!childOpen && root.openChildCount === 0) root.close()
+    }
 
     Loader {
       id: qmlLoader

@@ -1,10 +1,10 @@
 {
   "schemaVersion": 1,
-  "id": "io.github.katsari.nook",
-  "name": "Nook",
-  "version": "1.1.2",
-  "author": "Katsari",
-  "description": "A bar drawer for when too many plugins have cluttered your bar. Collapse the ones you rarely touch into a tray that opens below the bar rather than along it, so nothing on the bar gets covered or moved. Drag widgets in and out.",
+  "id": "kristofferr.groups",
+  "name": "Groups",
+  "version": "1.2.0",
+  "author": "Katsari, kristofferR",
+  "description": "Independent icon groups with drawers below the bar, based on Nook.",
   "kinds": [
     "bar-widget"
   ],
@@ -12,17 +12,38 @@
     "barWidget": "BarWidget.qml"
   },
   "barWidget": {
-    "displayName": "Nook",
-    "description": "A bar drawer for when too many plugins have cluttered your bar. Collapse the ones you rarely touch into a tray that opens below the bar rather than along it, so nothing on the bar gets covered or moved. Drag widgets in and out.",
+    "displayName": "Groups",
+    "description": "Independent icon groups with drawers below the bar, based on Nook.",
     "category": "Layout",
-    "allowMultiple": false,
+    "allowMultiple": true,
     "defaultSection": "right",
     "defaults": {
       "items": [],
       "trigger": "hover",
-      "duration": 180
+      "duration": 0,
+      "groupId": "",
+      "label": "Group",
+      "icon": "group"
     },
     "schema": [
+      {
+        "key": "groupId",
+        "type": "string",
+        "label": "Unique group ID",
+        "defaultValue": ""
+      },
+      {
+        "key": "label",
+        "type": "string",
+        "label": "Group name",
+        "defaultValue": "Group"
+      },
+      {
+        "key": "icon",
+        "type": "string",
+        "label": "Icon name",
+        "defaultValue": "group"
+      },
       {
         "key": "trigger",
         "type": "enum",
@@ -39,7 +60,7 @@
         "label": "Reveal duration (ms)",
         "min": 0,
         "max": 1000,
-        "defaultValue": 180
+        "defaultValue": 0
       }
     ]
   },

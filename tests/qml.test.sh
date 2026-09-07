@@ -3,8 +3,8 @@ set -euo pipefail
 
 ROOT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
 OMARCHY_SOURCE=${OMARCHY_PATH:-/usr/share/omarchy}
-QMLLINT_BIN=$(command -v qmllint 2>/dev/null || true)
-[[ -n $QMLLINT_BIN ]] || QMLLINT_BIN=/usr/lib/qt6/bin/qmllint
+QMLLINT_BIN=/usr/lib/qt6/bin/qmllint
+[[ -x $QMLLINT_BIN ]] || QMLLINT_BIN=$(command -v qmllint 2>/dev/null || true)
 TMP=$(mktemp -d)
 cleanup() { rm -rf -- "$TMP"; }
 trap cleanup EXIT
@@ -22,14 +22,14 @@ jq -e '.entryPoints.barWidget == "BarWidget.qml"' "$ROOT_DIR/manifest.json" >/de
 
 [[ -f $ROOT_DIR/LayoutModel.js ]] || fail "LayoutModel.js is missing"
 
-grep -q 'target: "io.github.katsari.nook"' "$ROOT_DIR/BarWidget.qml" \
+grep -Fq 'target: root.moduleName + (root.groupId ? "." + root.groupId : "")' "$ROOT_DIR/BarWidget.qml" \
   || fail "IpcHandler target does not match the plugin id"
 
 # qmllint: the mock-typed `bar` and host imports produce warnings on every
 # plugin, so only hard errors fail the run.
 if [[ -x $QMLLINT_BIN && -d $OMARCHY_SOURCE/shell/Commons ]]; then
   mkdir -p -- "$TMP/lint/qs"
-  cp -- "$ROOT_DIR/BarWidget.qml" "$ROOT_DIR/LayoutModel.js" "$TMP/lint/"
+  cp -- "$ROOT_DIR/BarWidget.qml" "$ROOT_DIR/LayoutModel.js" "$ROOT_DIR/GroupIcons.js" "$TMP/lint/"
   ln -s -- "$OMARCHY_SOURCE/shell/Commons" "$TMP/lint/qs/Commons"
   ln -s -- "$OMARCHY_SOURCE/shell/Ui" "$TMP/lint/qs/Ui"
   "$QMLLINT_BIN" --signal-handler-parameters disable -I "$TMP/lint" \

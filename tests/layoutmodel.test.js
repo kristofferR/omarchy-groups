@@ -10,7 +10,7 @@ const Layout = {}
 vm.createContext(Layout)
 vm.runInContext(source, Layout, { filename: "LayoutModel.js" })
 
-const NOOK = "io.github.katsari.nook"
+const NOOK = "kristofferr.groups"
 
 // Layout's functions run in the vm realm, so their arrays fail
 // assert.deepEqual's prototype check. Compare JSON shapes instead.
@@ -396,3 +396,42 @@ const makeConfig = () => ({
 }
 
 console.log("layoutmodel.test.js: all assertions passed")
+
+// Independent instances: every operation targets the requested group.
+{
+  const config = makeConfig()
+  config.bar.layout.right[1].groupId = "first"
+  config.bar.layout.left.push({id: NOOK, groupId: "second", items: [{id: "w.three", format: "saved"}]})
+  const firstBefore = JSON.stringify(config.bar.layout.right[1])
+  assert.equal(Layout.absorb(config, NOOK, "w.two", -1, true, "second"), true)
+  assert.equal(JSON.stringify(config.bar.layout.right[1]), firstBefore)
+  assert.equal(Layout.reorder(config, NOOK, 0, 2, "second"), true)
+  same(config.bar.layout.left[1].items, [{id: "w.two"}, {id: "w.three", format: "saved"}])
+  assert.equal(Layout.eject(config, NOOK, "w.three", true, "second"), true)
+  same(config.bar.layout.left[2], {id: "w.three", format: "saved"})
+  config.plugins.push({id: "w.two", color: "red"})
+  // Remove the bare marker so reclaim sees the updated settings entry.
+  config.plugins = config.plugins.filter(e => e.id !== "w.two" || e.color)
+  Layout.reconcile(config, NOOK, [], ["w.two"], "second")
+  same(config.bar.layout.left[1].items, [{id: "w.two", color: "red"}])
+  Layout.reconcile(config, NOOK, ["w.two"], [], "second")
+  same(config.bar.layout.left[1].items, [])
+  assert.equal(JSON.stringify(config.bar.layout.right[1]), firstBefore)
+  const before = JSON.stringify(config)
+  assert.equal(Layout.absorb(config, NOOK, "omarchy.clock", -1, true, "missing"), false)
+  assert.equal(Layout.absorb(config, NOOK, NOOK, -1, true, "second"), false)
+  assert.equal(JSON.stringify(config), before)
+  config.bar.layout.center.push({id: NOOK, groupId: "second", items: []})
+  const duplicateBefore = JSON.stringify(config)
+  assert.equal(Layout.absorb(config, NOOK, "omarchy.clock", -1, true, "second"), false)
+  assert.equal(JSON.stringify(config), duplicateBefore)
+}
+console.log("multiple-group isolation passed")
+
+{
+  const config = makeConfig()
+  config.bar.layout.right = [NOOK, NOOK, "w.two"]
+  const before = JSON.stringify(config)
+  assert.equal(Layout.absorb(config, NOOK, "w.two", -1, true), false)
+  assert.equal(JSON.stringify(config), before, "duplicate bare groups must remain untouched")
+}

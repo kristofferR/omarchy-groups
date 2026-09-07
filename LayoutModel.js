@@ -55,21 +55,26 @@ function hostableIndexes(items, moduleName) {
   return out
 }
 
-// Two drawers share this id and the first match wins, hence allowMultiple false.
-function findDrawerEntry(layout, moduleName) {
+// A group ID selects one drawer. Ambiguous or absent IDs never edit a sibling.
+function findDrawerEntry(layout, moduleName, groupId) {
+  var matches = []
   if (!isPlainObject(layout)) return null
   for (var s = 0; s < SECTIONS.length; s++) {
     var list = layout[SECTIONS[s]]
     if (!Array.isArray(list)) continue
     for (var i = 0; i < list.length; i++) {
       if (entryIdOf(list[i]) !== moduleName) continue
-      // A layout entry may be a bare id string, and `items` cannot be written
-      // onto one. Promote it in place before anyone tries.
-      if (typeof list[i] === "string") list[i] = { id: list[i] }
-      return { entry: list[i], section: SECTIONS[s], index: i }
+      if (String(list[i].groupId || "") !== String(groupId || "")) continue
+      matches.push({ entry: list[i], section: SECTIONS[s], index: i })
     }
   }
-  return null
+  if (matches.length !== 1) return null
+  var found = matches[0]
+  if (typeof found.entry === "string") {
+    found.entry = { id: found.entry }
+    layout[found.section][found.index] = found.entry
+  }
+  return found
 }
 
 function takeFromLayout(layout, id) {
@@ -118,10 +123,11 @@ function unmarkEnabled(config, id) {
 
 // -1 appends. `plugin` false for a custom module, which has no plugins[] entry
 // to enable.
-function absorb(config, moduleName, id, index, plugin) {
+function absorb(config, moduleName, id, index, plugin, groupId) {
+  if (!id || id === moduleName) return false
   // Find the drawer before taking anything out: mutateShellConfig persists the
   // mutation even on an early return, so removing first would lose the widget.
-  var found = findDrawerEntry(config.bar.layout, moduleName)
+  var found = findDrawerEntry(config.bar.layout, moduleName, groupId)
   if (!found) return false
   var moved = takeFromLayout(config.bar.layout, id)
   if (!moved) return false
@@ -134,8 +140,8 @@ function absorb(config, moduleName, id, index, plugin) {
 }
 
 // `widgetOnly` decides whether this id's plugins[] entry is safe to fold in.
-function eject(config, moduleName, id, widgetOnly) {
-  var found = findDrawerEntry(config.bar.layout, moduleName)
+function eject(config, moduleName, id, widgetOnly, groupId) {
+  var found = findDrawerEntry(config.bar.layout, moduleName, groupId)
   if (!found) return false
   if (widgetOnly) reclaim(config, found.entry, id)
   var moved = takeFromItems(found.entry, id)
@@ -147,9 +153,9 @@ function eject(config, moduleName, id, widgetOnly) {
 
 // `to` is an insertion index measured before the removal, so a move to a later
 // position shifts down by one.
-function reorder(config, moduleName, from, to) {
+function reorder(config, moduleName, from, to, groupId) {
   if (from < 0 || to < 0 || from === to || from === to - 1) return false
-  var found = findDrawerEntry(config.bar.layout, moduleName)
+  var found = findDrawerEntry(config.bar.layout, moduleName, groupId)
   if (!found || !Array.isArray(found.entry.items)) return false
   var items = found.entry.items
   var slots = hostableIndexes(items, moduleName)
@@ -190,8 +196,8 @@ function reclaim(config, drawerEntry, id) {
 }
 
 // Both jobs in one write: config refreshes only after a write.
-function reconcile(config, moduleName, gone, stranded) {
-  var found = findDrawerEntry(config.bar.layout, moduleName)
+function reconcile(config, moduleName, gone, stranded, groupId) {
+  var found = findDrawerEntry(config.bar.layout, moduleName, groupId)
   if (!found) return false
   for (var i = 0; i < gone.length; i++) {
     takeFromItems(found.entry, gone[i])

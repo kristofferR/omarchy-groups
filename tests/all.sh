@@ -10,7 +10,7 @@ node "$ROOT_DIR/tests/layoutmodel.test.js"
 # tests/all.sh --drag, or run tests/drag.test.py directly.
 if [[ ${1:-} == "--drag" ]]; then
   if [[ -x $ROOT_DIR/tests/tools/vptr/vptr ]]; then
-    python3 "$ROOT_DIR/tests/drag.test.py"
+    uv run --no-project python "$ROOT_DIR/tests/drag.test.py"
   else
     echo "drag.test.py: tests/tools/vptr/vptr not built, skipping" >&2
   fi

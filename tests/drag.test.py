@@ -21,7 +21,9 @@ import sys
 import tempfile
 import time
 
-NOOK = "io.github.katsari.nook"
+NOOK = "kristofferr.groups"
+GROUP_ID = os.environ.get("NOOK_GROUP_ID", "")
+TARGET = NOOK + ("." + GROUP_ID if GROUP_ID else "")
 SOURCE = sys.argv[1] if len(sys.argv) > 1 else "omarchy.spacer"
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 VPTR = ROOT / "tests" / "tools" / "vptr" / "vptr"
@@ -39,7 +41,12 @@ def screen():
 
 def geometry():
     slots = json.loads(sh("omarchy-shell", "shell", "debugBarGeometry"))
-    return {s["id"]: s for s in slots}
+    result = {s["id"]: s for s in slots}
+    state = json.loads(sh("omarchy-shell", TARGET, "status"))
+    groups = [s for s in slots if s["id"] == NOOK]
+    if groups:
+        result[NOOK] = min(groups, key=lambda s: abs(s["x"] - state["x"]))
+    return result
 
 
 def center(slot):
@@ -117,7 +124,7 @@ def nook_entry(cfg=None):
     cfg = cfg or config()
     for section in ("left", "center", "right"):
         for entry in cfg["bar"]["layout"].get(section, []):
-            if isinstance(entry, dict) and entry.get("id") == NOOK:
+            if isinstance(entry, dict) and entry.get("id") == NOOK and entry.get("groupId", "") == GROUP_ID:
                 return entry
     raise AssertionError("Nook is not in the bar layout; this test needs it there")
 

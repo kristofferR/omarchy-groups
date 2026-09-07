@@ -11,10 +11,11 @@ import Quickshell
 ShellRoot {
   id: root
 
-  readonly property string nookId: "io.github.katsari.nook"
+  readonly property string nookId: "kristofferr.groups"
   readonly property string sourceDir: Quickshell.env("NOOK_SOURCE_DIR")
 
   property var widget: null
+  property var secondWidget: null
   property int stage: 0
   property int ticksInStage: 0
 
@@ -65,7 +66,7 @@ ShellRoot {
   QtObject {
     id: mockRegistry
     property var installedPlugins: ({
-      "io.github.katsari.nook": { kinds: ["bar-widget"] },
+      "kristofferr.groups": { kinds: ["bar-widget"] },
       "w.hosted": { kinds: ["bar-widget"] },
       "w.bar": { kinds: ["bar-widget"] },
     })
@@ -84,6 +85,7 @@ ShellRoot {
             { id: "omarchy.clock", format: "long" },
             {
               id: root.nookId,
+              groupId: "first",
               trigger: "click",
               items: [{ id: "w.hosted" }, { id: "w.bar" }],
             },
@@ -109,6 +111,9 @@ ShellRoot {
       var settings = {}
       for (var key in entry) if (key !== "id") settings[key] = entry[key]
       root.widget.settings = settings
+      if (root.secondWidget) {
+        root.secondWidget.settings = shellConfig.bar.layout.left[0]
+      }
     }
   }
 
@@ -140,7 +145,7 @@ ShellRoot {
     property real barDragSceneX: 0
     property real barDragSceneY: 0
     // Empty peers make every instance the config writer.
-    function moduleWidgets(_name) { return [] }
+    function moduleWidgets(_name) { return [root.widget, root.secondWidget].filter(function(w) { return !!w }) }
     function registerClickTarget(_target) {}
     function unregisterClickTarget(_target) {}
     function showTooltip(_target, _text) {}
@@ -265,6 +270,40 @@ ShellRoot {
       // The prune waits out settleDelay (1.5s) before it writes.
       if (itemIds().join() !== "w.hosted" || pluginEntry("w.bar")) return
       if (widget.missingIds.length !== 0) return fail("missingIds not cleared")
+      var copy = JSON.parse(JSON.stringify(mockShell.shellConfig))
+      copy.bar.layout.left = [{id: nookId, groupId: "second", trigger: "click", items: []}]
+      mockShell.shellConfig = copy
+      var component = Qt.createComponent(encodeURI("file://" + sourceDir + "/BarWidget.qml"), Component.PreferSynchronous)
+      secondWidget = component.createObject(host, {bar: mockBar, moduleName: nookId,
+        settings: copy.bar.layout.left[0]})
+      if (!secondWidget || !secondWidget.configWriter) return fail("second group cannot write config")
+      secondWidget.absorb("omarchy.clock", -1)
+      if (itemIds().join() !== "w.hosted") return fail("second group changed first group")
+      if (secondWidget.entries.length !== 1 || secondWidget.entries[0].format !== "long")
+        return fail("second group did not retain absorbed settings")
+      secondWidget.eject("omarchy.clock")
+      if (mockShell.shellConfig.bar.layout.left[1].id !== "omarchy.clock")
+        return fail("eject went to wrong region")
+      // Suppress mapping windows in this harness while testing open coordination.
+      widget.settings = {groupId: "first", items: [], trigger: "click"}
+      secondWidget.settings = {groupId: "second", items: [], trigger: "click"}
+      widget.open()
+      if (!widget.latched || secondWidget.latched) return fail("open leaked into sibling")
+      secondWidget.open()
+      if (widget.expanded || !secondWidget.expanded) return fail("opening second did not close first")
+      secondWidget.broadcastGroup("close")
+      if (secondWidget.expanded) return fail("close failed")
+      secondWidget.settings = {groupId: "second", items: [], trigger: "hover"}
+      secondWidget.close()
+      secondWidget.pointerInside = true
+      if (!secondWidget.hoverHeld) return fail("close outside group suppressed next hover")
+      secondWidget.close()
+      if (secondWidget.hoverHeld) return fail("close under pointer immediately reopened group")
+      secondWidget.pointerInside = false
+      secondWidget.pointerInside = true
+      if (!secondWidget.hoverHeld) return fail("leaving and returning did not restore hover")
+      secondWidget.pointerInside = false
+      secondWidget.close()
       pass()
     }
   }
