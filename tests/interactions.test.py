@@ -22,7 +22,14 @@ def group(name, cfg=None):
                 if e['id'] == 'kristofferr.groups' and e.get('groupId') == name)
 def ids(name): return [e['id'] if isinstance(e, dict) else e for e in group(name)['items']]
 def ipc(name, method): return d.sh('omarchy-shell', 'kristofferr.groups.' + name, method)
-def state(name): return json.loads(ipc(name, 'status'))
+def state(name):
+    # Config writes rebuild the native bar; its IPC can pause during that reload.
+    result = {}
+    def read():
+        result.update(json.loads(ipc(name, 'status')))
+        return True
+    d.wait_for(read, name + ' IPC after layout reload')
+    return result
 def gpoint(name):
     s = state(name)
     return round(s['x'] + s['width'] / 2), 13
@@ -96,16 +103,19 @@ def main():
         ipc(DEST, 'open')
         wait(lambda: d.geometry()[PROBE]['y'] >= 26, 'probe below bar')
         mouse.glide(gpoint(DEST), d.item_center(d.geometry()[PROBE]))
-        # Drop immediately before the clock in a different region from SOURCE.
+        # The user may move the clock between regions; target its current slot.
+        clock_section = next(section for section, entries in config()['bar']['layout'].items()
+                             if any(e['id'] == 'omarchy.clock' for e in entries))
         clock = d.geometry()['omarchy.clock']
         mouse.drag(d.item_center(d.geometry()[PROBE]), (clock['x'] + 2, 13))
         wait(lambda: PROBE not in ids(DEST), 'group to exact bar slot')
-        right = config()['bar']['layout']['right']
-        probe_index = next(i for i,e in enumerate(right) if e['id'] == PROBE)
-        assert right[probe_index+1]['id'] == 'omarchy.clock', 'drop must land before clock'
-        assert right[probe_index] == fixture
+        section = config()['bar']['layout'][clock_section]
+        probe_index = next(i for i,e in enumerate(section) if e['id'] == PROBE)
+        assert section[probe_index+1]['id'] == 'omarchy.clock', 'drop must land before clock'
+        assert section[probe_index] == fixture
         print('group → precise bar slot, settings retained', flush=True)
 
+        wait(lambda: d.geometry()[PROBE]['y'] < 26, 'probe reconstructed on bar')
         mouse.drag(d.center(d.geometry()[PROBE]), gpoint(DEST))
         wait(lambda: PROBE in ids(DEST), 'bar back into group')
         mouse.move((700,300), dwell=400)

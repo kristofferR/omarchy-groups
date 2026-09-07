@@ -20,6 +20,34 @@ BarWidget {
   id: root
   moduleName: "kristofferr.groups"
 
+  // Groups is a widget host, so it needs the containing bar's registry and
+  // drag coordinator. Recent shells inject a presentation-only facade into
+  // ordinary widgets. Resolve the native bar from a first-party slot in the
+  // same visual surface; hosted third-party widgets still get scoped APIs.
+  function nativeBarIn(item) {
+    if (!item) return null
+    if (item.firstParty === true && item.activeItem && item.activeItem.bar
+        && item.activeItem.bar.moduleSlots) return item.activeItem.bar
+    var children = item.children || []
+    for (var i = 0; i < children.length; i++) {
+      var found = nativeBarIn(children[i])
+      if (found) return found
+    }
+    return null
+  }
+  function connectHost() {
+    if (!bar || bar.moduleSlots || !barWindow) return
+    var host = nativeBarIn(barWindow.contentItem)
+    if (host) bar = host
+  }
+  onBarChanged: Qt.callLater(connectHost)
+  Timer {
+    interval: 200
+    repeat: true
+    running: root.bar && !root.bar.moduleSlots && root.barWindow !== null
+    onTriggered: root.connectHost()
+  }
+
   // Read `settings` directly, not through the base class's setting(): the host
   // assigns it after construction, and a binding that reaches it through a helper
   // call never re-evaluates when that lands.
@@ -731,7 +759,7 @@ BarWidget {
       width: Style.space(14)
       height: Style.space(14)
       sourceSize.width: width * (root.barWindow && root.barWindow.screen ? root.barWindow.screen.devicePixelRatio : 1)
-      sourceSize.height: sourceSize.width
+      sourceSize.height: height * (root.barWindow && root.barWindow.screen ? root.barWindow.screen.devicePixelRatio : 1)
       source: GroupIcons.source(root.groupIcon, String(chevron.active ? chevron.activeColor : chevron.foreground))
     }
     fixedWidth: Style.space(28)
@@ -1144,7 +1172,12 @@ BarWidget {
     function inject() {
       var target = childItem
       if (!target) return
-      if ("bar" in target) target.bar = cell.host
+      if ("bar" in target) {
+        var metadata = root.widgetRegistry[cell.childId]
+        var firstParty = metadata && metadata.metadata && metadata.metadata.firstParty === true
+        target.bar = firstParty || !root.bar || typeof root.bar.pluginBarApiFor !== "function"
+          ? cell.host : root.bar.pluginBarApiFor(cell.custom ? "bar-entry:" + cell.childId : cell.childId, cell.childId, !cell.custom)
+      }
       if ("entry" in target) target.entry = cell.plainEntry
       if ("moduleName" in target) target.moduleName = cell.childId
       if ("settings" in target) target.settings = cell.childSettings
@@ -1242,6 +1275,7 @@ BarWidget {
       readonly property var entry: cell.entry
       readonly property string region: root.region
       readonly property string moduleName: cell.childId
+      readonly property string pluginApiId: cell.custom ? "bar-entry:" + cell.childId : cell.childId
       readonly property var moduleSettings: cell.childSettings
       readonly property string customType: cell.customType
       readonly property bool qmlCustom: cell.customType === "qml"

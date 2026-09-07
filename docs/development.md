@@ -34,6 +34,9 @@ original configuration and pointer. Set `NOOK_GROUP_ID` and
 `NOOK_TARGET_GROUP_ID` to two existing groups (defaults: `windows` and `input`).
 
 Nook integrates with Omarchy's bar internals rather than a stable hosting API.
+On shells with scoped plugin APIs, Groups resolves the containing bar through a
+first-party widget on the same bar, such as the menu or clock. Keep at least one
+such widget present. Hosted third-party widgets retain their scoped APIs.
 Top-bar behavior is the supported and verified configuration here. Some widgets
 hide themselves when idle or when hardware is absent; their slots are still
 loaded. Widgets retain their own tooltip and status behavior. The group trigger
