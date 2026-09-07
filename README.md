@@ -40,7 +40,9 @@ Drag an existing bar icon onto the new group to get started. Use **Add group** i
 }
 ```
 
-The settings panel creates unique group IDs automatically. For hand-written entries, every group needs a unique, stable `groupId`. Available icons are `windows`, `development`, `input`, `sound`, `devices`, `display`, `appearance`, `maintenance`, and `group`.
+The settings panel creates unique group IDs automatically. For hand-written entries, every group needs a unique, stable `groupId`. The searchable picker includes 1,821 choices: the original group icons plus the bundled Lucide catalog. Search by name or keyword, such as `bluetooth`, `music`, or `rocket`. Icons work offline, and existing icon names stay compatible.
+
+![Searchable icon picker](assets/icon-picker.png)
 
 Start with empty groups and drag widgets into them. Dragging manages plugin enablement and preserves settings automatically. When configuring `items` by hand, keep the hosted plugins enabled through the top-level `plugins` array, preserving any existing service settings.
 
@@ -76,7 +78,7 @@ Opening another group closes the previous drawer and its child panel. A widget's
 
 ## Settings
 
-Right-click any group to open the shared settings panel. Select a group, change its name, pick an icon, choose left/center/right placement and hover/click opening, toggle **Show icon border**, then press **Save changes**. Edits preserve hosted widgets and their settings.
+Right-click any group to open the shared settings panel. Select a group, change its name, open the searchable icon picker, choose left/center/right placement and hover/click opening, toggle **Show icon border**, then press **Save changes**. Edits preserve hosted widgets and their settings.
 
 **Add group** creates an empty drawer ready for icons. **Remove group** returns its widgets to the same bar section, preserving their settings. The settings shortcut is kept separate from the editable groups.
 
@@ -134,6 +136,8 @@ Groups runs inside Omarchy Shell with your user's permissions. Moving widgets up
 
 Based on [Nook](https://github.com/Katsari/nook) by Katsari, starting from version 1.1.2. Its widget hosting, panel anchoring, scrolling, original drag handling, and Git history are preserved.
 
+The additional icon catalog comes from [Lucide](https://lucide.dev), bundled at a pinned revision. Its ISC/MIT notices are included in [assets/LICENSE-lucide.txt](assets/LICENSE-lucide.txt). Regenerate it with `uv run --no-project python scripts/update-icons.py`.
+
 ## License
 
-MIT
+MIT for the plugin. Bundled Lucide icons retain their ISC/MIT licenses.

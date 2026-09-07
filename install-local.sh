@@ -5,7 +5,7 @@ target_dir="$HOME/.config/omarchy/plugins/kristofferr.groups"
 omarchy plugin validate "$source_dir"
 mkdir -p -- "$target_dir/assets"
 # Deploy only runtime files. Layout and plugin settings remain user-owned.
-for file in BarWidget.qml LayoutModel.js GroupIcons.js Settings.qml assets/icon.svg preview.png manifest.json LICENSE; do
+for file in BarWidget.qml LayoutModel.js GroupIcons.js LucideIcons.js Settings.qml assets/icon.svg assets/LICENSE-lucide.txt preview.png manifest.json LICENSE; do
   install -m 644 -- "$source_dir/$file" "$target_dir/$file"
 done
 # Hosted widgets retain Component references across a plugin-only rescan.

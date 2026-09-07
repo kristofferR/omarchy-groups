@@ -4,6 +4,7 @@ set -euo pipefail
 ROOT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
 
 node "$ROOT_DIR/tests/layoutmodel.test.js"
+node "$ROOT_DIR/tests/icons.test.js"
 "$ROOT_DIR/tests/qml.test.sh"
 
 # The drag test seizes the pointer for about 20 seconds, so it is opt-in:

@@ -29,7 +29,7 @@ grep -Fq 'target: root.moduleName + (root.groupId ? "." + root.groupId : "")' "$
 # plugin, so only hard errors fail the run.
 if [[ -x $QMLLINT_BIN && -d $OMARCHY_SOURCE/shell/Commons ]]; then
   mkdir -p -- "$TMP/lint/qs"
-  cp -- "$ROOT_DIR/BarWidget.qml" "$ROOT_DIR/LayoutModel.js" "$ROOT_DIR/GroupIcons.js" "$ROOT_DIR/Settings.qml" "$TMP/lint/"
+  cp -- "$ROOT_DIR/BarWidget.qml" "$ROOT_DIR/LayoutModel.js" "$ROOT_DIR/GroupIcons.js" "$ROOT_DIR/LucideIcons.js" "$ROOT_DIR/Settings.qml" "$TMP/lint/"
   ln -s -- "$OMARCHY_SOURCE/shell/Commons" "$TMP/lint/qs/Commons"
   ln -s -- "$OMARCHY_SOURCE/shell/Ui" "$TMP/lint/qs/Ui"
   "$QMLLINT_BIN" --signal-handler-parameters disable -I "$TMP/lint" \

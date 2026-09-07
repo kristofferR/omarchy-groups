@@ -17,7 +17,8 @@ Item {
   property bool hasSelection: false
   property string chosenIcon: "group"
   property string message: ""
-  readonly property var iconNames: Object.keys(GroupIcons.paths).filter(function(name) { return name !== "manager" })
+  property bool choosingIcon: false
+  readonly property var iconNames: GroupIcons.names
   readonly property var groups: {
     var layout = shell && shell.shellConfig && shell.shellConfig.bar ? shell.shellConfig.bar.layout : null
     var result = []
@@ -43,6 +44,7 @@ Item {
     message = ""
   }
   function open(payload) {
+    choosingIcon = false
     opened = true
     selectGroup(groups.find(function(group) { return group.id === selectedId }) || groups[0])
     Qt.callLater(function() { content.forceActiveFocus() })
@@ -120,6 +122,7 @@ Item {
       MouseArea { anchors.fill: parent }
       Column {
         id: content
+        visible: !root.choosingIcon
         anchors.fill: parent
         anchors.margins: Style.space(24)
         spacing: Style.space(20)
@@ -207,26 +210,27 @@ Item {
               Label { text: "Name"; opacity: 0.7 }
               TextField { id: nameField; width: parent.width; maximumLength: 80; placeholderText: "Group name"; foreground: Color.menu.text; onAccepted: root.saveGroup() }
               Label { text: "Icon"; opacity: 0.7 }
-              Flow {
+              Button {
                 width: parent.width
-                spacing: Style.space(6)
-                Repeater {
-                  model: root.iconNames
-                  Button {
-                    required property string modelData
-                    width: Style.space(42); height: width
-                    bordered: true; focusable: true
-                    selected: root.chosenIcon === modelData
-                    tooltipText: modelData
-                    onClicked: root.chosenIcon = modelData
-                    Image {
-                      anchors.centerIn: parent
-                      width: Style.space(22); height: width
-                      source: GroupIcons.source(modelData, String(Color.menu.text))
-                      sourceSize.width: width * (window.screen ? window.screen.devicePixelRatio : 1)
-                      sourceSize.height: sourceSize.width
-                    }
-                  }
+                text: root.chosenIcon.replace(/-/g, " ")
+                leftAlign: true
+                horizontalPadding: Style.space(50)
+                bordered: true
+                focusable: true
+                tooltipText: "Choose icon"
+                onClicked: {
+                  iconSearch.text = ""
+                  root.choosingIcon = true
+                  Qt.callLater(function() { iconSearch.forceActiveFocus() })
+                }
+                Image {
+                  anchors.left: parent.left
+                  anchors.leftMargin: Style.space(14)
+                  anchors.verticalCenter: parent.verticalCenter
+                  width: Style.space(22); height: width
+                  source: GroupIcons.source(root.chosenIcon, String(Color.menu.text))
+                  sourceSize.width: width * (window.screen ? window.screen.devicePixelRatio : 1)
+                  sourceSize.height: sourceSize.width
                 }
               }
               Row {
@@ -256,6 +260,65 @@ Item {
           height: doneButton.height
           Label { anchors.left: parent.left; anchors.right: doneButton.left; anchors.rightMargin: Style.space(12); anchors.verticalCenter: parent.verticalCenter; text: root.message; wrapMode: Text.WordWrap; font.pixelSize: Style.font.caption; opacity: 0.7 }
           Button { id: doneButton; anchors.right: parent.right; text: "Done"; bordered: true; focusable: true; onClicked: root.close() }
+        }
+      }
+      Column {
+        id: iconChooser
+        anchors.fill: parent
+        anchors.margins: Style.space(24)
+        spacing: Style.space(16)
+        visible: root.choosingIcon
+        Keys.onEscapePressed: function(event) { root.choosingIcon = false; content.forceActiveFocus(); event.accepted = true }
+        Row {
+          width: parent.width
+          spacing: Style.space(16)
+          Button { text: "Back"; bordered: true; focusable: true; onClicked: { root.choosingIcon = false; content.forceActiveFocus() } }
+          Label { anchors.verticalCenter: parent.verticalCenter; text: "Choose an icon"; font.pixelSize: Style.font.title; font.bold: true }
+        }
+        TextField {
+          id: iconSearch
+          width: parent.width
+          placeholderText: "Search " + root.iconNames.length + " icons by name or keyword"
+          foreground: Color.menu.text
+        }
+        Label {
+          text: iconGrid.count + " icons · current: " + root.chosenIcon.replace(/-/g, " ")
+          opacity: 0.65
+          font.pixelSize: Style.font.caption
+        }
+        GridView {
+          id: iconGrid
+          width: parent.width
+          height: Math.max(0, iconChooser.height - y)
+          cellWidth: width / Math.max(1, Math.floor(width / Style.space(56)))
+          cellHeight: Style.space(56)
+          clip: true
+          boundsBehavior: Flickable.StopAtBounds
+          QQC.ScrollBar.vertical: QQC.ScrollBar {}
+          model: GroupIcons.search(iconSearch.text)
+          onModelChanged: positionViewAtBeginning()
+          delegate: Button {
+            required property string modelData
+            width: iconGrid.cellWidth - Style.space(6)
+            height: iconGrid.cellHeight - Style.space(6)
+            bordered: true
+            focusable: true
+            selected: root.chosenIcon === modelData
+            tooltipText: modelData.replace(/-/g, " ")
+            onClicked: {
+              root.chosenIcon = modelData
+              root.choosingIcon = false
+              content.forceActiveFocus()
+            }
+            Image {
+              anchors.centerIn: parent
+              width: Style.space(24); height: width
+              source: GroupIcons.source(modelData, String(Color.menu.text))
+              sourceSize.width: width * (window.screen ? window.screen.devicePixelRatio : 1)
+              sourceSize.height: sourceSize.width
+            }
+          }
+          Label { anchors.centerIn: parent; visible: iconGrid.count === 0; text: "No icons match this search."; opacity: 0.65 }
         }
       }
     }

@@ -1,4 +1,5 @@
 .pragma library
+.import "LucideIcons.js" as Lucide
 
 // Fixed viewboxes avoid Nerd Font glyph bearings shifting icons off center.
 var paths = {
@@ -14,8 +15,24 @@ var paths = {
   "group": "<rect x=\"3\" y=\"3\" width=\"7\" height=\"7\" rx=\"1\"/><rect x=\"14\" y=\"3\" width=\"7\" height=\"7\" rx=\"1\"/><rect x=\"3\" y=\"14\" width=\"7\" height=\"7\" rx=\"1\"/><rect x=\"14\" y=\"14\" width=\"7\" height=\"7\" rx=\"1\"/>"
 }
 
+var names = Object.keys(paths).filter(function(name) { return name !== "manager" })
+  .concat(Object.keys(Lucide.paths).filter(function(name) { return !paths[name] }).sort())
+
+function search(query) {
+  var text = String(query || "").toLowerCase().trim()
+  if (!text) return names
+  var tokens = text.split(/\s+/)
+  var matches = names.filter(function(name) {
+    var keywords = (name + " " + (Lucide.keywords[name] || "")).toLowerCase()
+    return tokens.every(function(token) { return keywords.indexOf(token) !== -1 })
+  })
+  var exact = matches.indexOf(text)
+  if (exact > 0) matches.unshift(matches.splice(exact, 1)[0])
+  return matches
+}
+
 function source(name, color) {
-  var body = paths[name] || paths.group
+  var body = paths[name] || Lucide.paths[name] || paths.group
   return "data:image/svg+xml;utf8," + encodeURIComponent(
     '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="'
     + color + '" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">'
