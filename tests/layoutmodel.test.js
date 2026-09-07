@@ -475,9 +475,10 @@ console.log('exact bar placement and group transfer passed')
   const drawer = config.bar.layout.right[1]
   drawer.custom = 'keep'
   drawer.items.push({id: 'w.new', setting: 42}) // a concurrent drag
-  assert.equal(Layout.updateGroup(config, NOOK, 'group-1', {label: '  Devices  ', icon: 'devices', trigger: 'click', section: 'center'}), true)
+  assert.equal(Layout.updateGroup(config, NOOK, 'group-1', {label: '  Devices  ', icon: 'devices', trigger: 'click', section: 'center', showBorder: false}), true)
   assert.equal(config.bar.layout.center[0], drawer)
   assert.equal(drawer.label, 'Devices')
+  assert.equal(drawer.showBorder, false)
   assert.equal(drawer.custom, 'keep')
   same(drawer.items, [{id: 'w.one'}, {id: 'w.new', setting: 42}])
   const before = JSON.stringify(config)

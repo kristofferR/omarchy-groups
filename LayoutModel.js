@@ -288,6 +288,7 @@ function updateGroup(config, moduleName, groupId, changes) {
   found.entry.label = changes.label.trim()
   found.entry.icon = changes.icon
   found.entry.trigger = changes.trigger
+  if (typeof changes.showBorder === "boolean") found.entry.showBorder = changes.showBorder
   if (found.section !== changes.section) {
     if (!Array.isArray(config.bar.layout[changes.section])) config.bar.layout[changes.section] = []
     config.bar.layout[found.section].splice(found.index, 1)

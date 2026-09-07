@@ -23,6 +23,7 @@ BarWidget {
   // Read `settings` directly, not through the base class's setting(): the host
   // assigns it after construction, and a binding that reaches it through a helper
   // call never re-evaluates when that lands.
+  readonly property bool showBorder: !settings || settings.showBorder !== false
   readonly property bool isManager: settings && settings.role === "manager"
   readonly property string groupId: settings && settings.groupId ? String(settings.groupId) : ""
   readonly property string groupLabel: settings && settings.label ? String(settings.label) : "Group"
@@ -739,7 +740,7 @@ BarWidget {
       anchors.margins: Style.space(4)
       radius: Style.space(3)
       color: Qt.alpha(root.hostedForeground, root.expanded ? 0.12 : 0.04)
-      border.width: 1
+      border.width: root.showBorder ? 1 : 0
       border.color: Qt.alpha(root.hostedForeground, root.expanded ? 0.7 : 0.35)
       z: -1
     }

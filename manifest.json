@@ -25,7 +25,8 @@
       "duration": 0,
       "groupId": "",
       "label": "Group",
-      "icon": "group"
+      "icon": "group",
+      "showBorder": true
     },
     "schema": [
       {
@@ -63,6 +64,12 @@
         "min": 0,
         "max": 1000,
         "defaultValue": 0
+      },
+      {
+        "key": "showBorder",
+        "type": "boolean",
+        "label": "Show icon border",
+        "defaultValue": true
       }
     ]
   },

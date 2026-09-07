@@ -76,7 +76,7 @@ Opening another group closes the previous drawer and its child panel. A widget's
 
 ## Settings
 
-Right-click any group to open the shared settings panel. Select a group, change its name, pick an icon, choose left/center/right placement and hover/click opening, then press **Save changes**. Edits preserve hosted widgets and their settings.
+Right-click any group to open the shared settings panel. Select a group, change its name, pick an icon, choose left/center/right placement and hover/click opening, toggle **Show icon border**, then press **Save changes**. Edits preserve hosted widgets and their settings.
 
 **Add group** creates an empty drawer ready for icons. **Remove group** returns its widgets to the same bar section, preserving their settings. The settings shortcut is kept separate from the editable groups.
 

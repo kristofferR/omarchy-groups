@@ -26,7 +26,7 @@ Item {
       ;(layout[section] || []).forEach(function(entry) {
         if (Layout.entryIdOf(entry) === "kristofferr.groups" && entry.role !== "manager")
           result.push({id: String(entry.groupId || ""), name: entry.label || "Group", icon: entry.icon || "group",
-            trigger: entry.trigger || "hover", section: section, count: entry.items ? entry.items.length : 0})
+            trigger: entry.trigger || "hover", showBorder: entry.showBorder !== false, section: section, count: entry.items ? entry.items.length : 0})
       })
     })
     return result
@@ -39,6 +39,7 @@ Item {
     chosenIcon = group ? group.icon : "group"
     positionPicker.value = group ? group.section : "right"
     triggerPicker.value = group ? group.trigger : "hover"
+    borderToggle.checked = !group || group.showBorder !== false
     message = ""
   }
   function open(payload) {
@@ -64,7 +65,7 @@ Item {
   }
   function saveGroup() {
     if (!hasSelection) return
-    var changes = {label: nameField.text, icon: chosenIcon, section: positionPicker.value, trigger: triggerPicker.value}
+    var changes = {label: nameField.text, icon: chosenIcon, section: positionPicker.value, trigger: triggerPicker.value, showBorder: borderToggle.checked}
     var ok = mutate(function(config) { return Layout.updateGroup(config, "kristofferr.groups", selectedId, changes) })
     message = ok ? "Saved" : "Could not save. Check the name and that the group ID is unique."
     if (ok) nameField.text = changes.label.trim()
@@ -112,7 +113,7 @@ Item {
       id: card
       anchors.centerIn: parent
       width: Math.min(Style.space(780), window.width - Style.gapsOut * 2)
-      height: Math.min(Style.space(600), window.height - Style.gapsOut * 2)
+      height: Math.min(Style.space(680), window.height - Style.gapsOut * 2)
       color: Color.menu.background
       radius: Style.cornerRadius
       borderSpec: Border.surfaceSpec("menu", "border", Color.menu.border, Math.max(1, Style.space(2)))
@@ -233,6 +234,13 @@ Item {
                 spacing: Style.space(12)
                 Dropdown { id: positionPicker; width: (parent.width - parent.spacing) / 2; label: "Position"; options: ["left", "center", "right"] }
                 Dropdown { id: triggerPicker; width: (parent.width - parent.spacing) / 2; label: "Open on"; options: ["hover", "click"] }
+              }
+              Toggle {
+                id: borderToggle
+                width: parent.width
+                label: "Show icon border"
+                foreground: Color.menu.text
+                onClicked: checked = !checked
               }
               Button { text: "Save changes"; bordered: true; selected: true; focusable: true; enabled: nameField.text.trim().length > 0; onClicked: root.saveGroup() }
               Label { width: parent.width; text: "Drag icons to reorder them or move them between groups."; wrapMode: Text.WordWrap; opacity: 0.6; font.pixelSize: Style.font.caption }
