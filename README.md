@@ -5,7 +5,8 @@ Independent, named icon groups that open directly below the bar. A fork of
 The existing widget hosting, panel anchoring, scrolling and drag handling come
 from Nook. The MIT license and upstream history are preserved.
 
-Each group has a boxed icon, a name on hover, and a unique `groupId`. Opening a
+Each group has a boxed icon, a configured name, and a unique `groupId`. Hover-open
+groups suppress the button tooltip so it cannot cover the drawer. Opening a
 group closes the previous group and its open child panel. The bar stays one row:
 opening a drawer does not move any bar icons. Hover opens the drawer; click pins
 it; click again closes it. Clicking outside, including empty bar space, dismisses

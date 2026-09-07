@@ -566,7 +566,8 @@ BarWidget {
     }
     active: root.dropHovered || root.expanded
     activeColor: Color.accent          // `active` defaults to bar.urgent, kept for urgency
-    tooltipText: root.groupLabel + " · " + root.entries.length + " plugins"
+    tooltipText: root.trigger === "hover" || root.expanded
+      ? "" : root.groupLabel + " · " + root.entries.length + " plugins"
     // Tests `latched`, not `expanded`: hovering already makes it expanded, so
     // branching on that meant a click could only ever close it.
     onPressed: function(button) {
