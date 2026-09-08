@@ -2,7 +2,7 @@
 
 Organize your Omarchy bar into independent icon groups. Drawers open below the bar, so your other icons stay in place. Drag widgets into groups, back onto the bar, or directly between groups.
 
-![Group settings for name, icon, position, and drawer behavior](preview.png)
+![Omarchy menu bar with Sound & media hovered, revealing its four widgets below the bar](preview.png)
 
 ## Highlights
 
@@ -68,6 +68,8 @@ omarchy plugin remove kristofferr.groups --yes
 Opening another group closes the previous drawer and its child panel. A widget's own panel keeps its group open while in use. Nested groups are not supported.
 
 ## Settings
+
+![Group settings for name, icon, position, and drawer behavior](assets/group-settings.png)
 
 Right-click a group to edit that group in the shared settings panel. Everything needed to organize groups is available here:
 
