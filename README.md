@@ -2,7 +2,7 @@
 
 Organize your Omarchy bar into independent icon groups. Drawers open below the bar, so your other icons stay in place. Drag widgets into groups, back onto the bar, or directly between groups.
 
-![Groups settings](preview.png)
+![Group settings for name, icon, position, and drawer behavior](preview.png)
 
 ## Highlights
 
@@ -29,6 +29,8 @@ omarchy plugin add https://github.com/kristofferR/omarchy-groups.git --enable
 Click the new empty group to open settings. Give it a name, choose an icon, and save. In **Widgets**, choose **Add widgets** to select installed widgets or move them from the bar or another group. You can also drag existing bar icons directly onto a group.
 
 Use **Add group** to create more empty groups. Group identities and plugin enablement are managed automatically. A fresh install uses your existing bar and creates no preset groups.
+
+![Add installed widgets or move them from the bar and other groups](assets/add-widgets.png)
 
 The searchable icon picker includes the original group icons and the bundled Lucide catalog. Search by name or keyword, such as `bluetooth`, `music`, or `rocket`. Icons work offline, and existing icon names stay compatible.
 
@@ -76,6 +78,8 @@ Right-click a group to edit that group in the shared settings panel. Everything 
 - **Settings button on bar:** show or hide a dedicated settings shortcut. It stays visible while there are no groups.
 
 Groups can also be dragged along the bar. Escape, Done, or clicking outside closes settings. Use Groups' own settings panel for its individual drawers.
+
+![Reorder widgets in a group or return them to the bar](assets/group-widgets.png)
 
 ### Optional terminal controls
 
