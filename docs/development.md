@@ -45,3 +45,12 @@ Top-bar behavior is the supported and verified configuration here. Some widgets
 hide themselves when idle or when hardware is absent; their slots are still
 loaded. Widgets retain their own tooltip and status behavior. The group trigger
 does not aggregate every plugin's urgency state.
+
+On stock bars that still rebuild array-backed widget lists, Groups installs a
+small runtime adapter that preserves native widgets during layout edits. It
+changes only those lists in memory, requires no configuration or system-file
+edits, and skips bars with the native fix (omacom/omarchy#10931). The adapter
+belongs to each native list so removing or reloading Groups does not break the
+bar. A shell restart clears it; loading Groups installs it again where needed.
+The compatibility harness checks delegate identity, repeated group IDs, nested
+settings, reordering, empty sections, orientation changes, and native-fix bypass.

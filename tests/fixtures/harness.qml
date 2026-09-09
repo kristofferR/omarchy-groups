@@ -463,6 +463,19 @@ ShellRoot {
         return fail("scoped settings did not persist name and widgets")
       if (saved.plugins[0].setting !== "keep") return fail("scoped settings overwrote unrelated service settings")
       settingsPanel.close()
+      secondWidget.settings = {groupId: "second", items: [], trigger: "hover"}
+      secondWidget.close()
+      secondWidget.draggingIndex = 0
+      if (!secondWidget.expanded || !secondWidget.hoverGrace) return fail("drag did not hold reveal grace")
+      secondWidget.draggingIndex = -1
+      if (!secondWidget.expanded) return fail("release closed drawer before hover handoff")
+      secondWidget.pointerInside = true
+      if (!secondWidget.hoverHeld || !secondWidget.expanded) return fail("hover did not take over after drop")
+      secondWidget.pointerInside = false
+      next()
+    } else if (stage === 8) {
+      if (ticksInStage < 6) return
+      if (secondWidget.hoverGrace || secondWidget.expanded) return fail("drop grace did not expire after pointer left")
       pass()
     }
   }

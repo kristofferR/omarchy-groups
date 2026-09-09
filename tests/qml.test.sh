@@ -29,7 +29,7 @@ grep -Fq 'target: root.moduleName + (root.groupId ? "." + root.groupId : "")' "$
 # plugin, so only hard errors fail the run.
 if [[ -x $QMLLINT_BIN && -d $OMARCHY_SOURCE/shell/Commons ]]; then
   mkdir -p -- "$TMP/lint/qs"
-  cp -- "$ROOT_DIR/BarWidget.qml" "$ROOT_DIR/LayoutModel.js" "$ROOT_DIR/GroupIcons.js" "$ROOT_DIR/LucideIcons.js" "$ROOT_DIR/Settings.qml" "$TMP/lint/"
+  cp -- "$ROOT_DIR/BarWidget.qml" "$ROOT_DIR/LayoutModel.js" "$ROOT_DIR/BarCompatibility.js" "$ROOT_DIR/GroupIcons.js" "$ROOT_DIR/LucideIcons.js" "$ROOT_DIR/Settings.qml" "$TMP/lint/"
   ln -s -- "$OMARCHY_SOURCE/shell/Commons" "$TMP/lint/qs/Commons"
   ln -s -- "$OMARCHY_SOURCE/shell/Ui" "$TMP/lint/qs/Ui"
   "$QMLLINT_BIN" --signal-handler-parameters disable -I "$TMP/lint" \
@@ -65,4 +65,14 @@ if ! grep -Fq 'NOOK_TEST_OK' "$TMP/quickshell.log" \
   fail "harness did not pass"
 fi
 
-echo "qml.test.sh: lint, source checks, and harness passed"
+mkdir -p -- "$TMP/compat"
+cp -- "$ROOT_DIR/tests/fixtures/bar-compatibility.qml" "$TMP/compat/shell.qml"
+cp -- "$ROOT_DIR/BarCompatibility.js" "$ROOT_DIR/LayoutModel.js" "$TMP/compat/"
+timeout 10 quickshell -p "$TMP/compat" --no-color >"$TMP/compat.log" 2>&1 || true
+if ! grep -Fq 'GROUPS_COMPAT_OK' "$TMP/compat.log" \
+    || grep -Eq 'GROUPS_COMPAT_FAIL|^[[:space:]]*(WARN|ERROR)([[:space:]:]|$)' "$TMP/compat.log"; then
+  cat "$TMP/compat.log" >&2
+  fail "bar compatibility harness did not pass cleanly"
+fi
+
+echo "qml.test.sh: lint, source checks, and harnesses passed"

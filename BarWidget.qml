@@ -6,6 +6,7 @@ import Quickshell.Wayland
 import qs.Commons
 import qs.Ui
 import "LayoutModel.js" as Layout
+import "BarCompatibility.js" as BarCompatibility
 import "GroupIcons.js" as GroupIcons
 
 // Hosts other bar widgets behind a chevron, in a strip that opens off the bar.
@@ -49,6 +50,17 @@ BarWidget {
     if (host) resolvedHost = host
   }
   onBarChanged: connectHost()
+  onHostBarChanged: if (barCompatibility) barCompatibility.restart()
+  Timer {
+    id: barCompatibility
+    interval: 0
+    onTriggered: BarCompatibility.ensure(root.hostBar)
+  }
+  Connections {
+    target: root.hostBar
+    ignoreUnknownSignals: true
+    function onModuleSlotsChanged() { if (barCompatibility) barCompatibility.restart() }
+  }
   Timer {
     interval: 200
     repeat: true
@@ -164,8 +176,12 @@ BarWidget {
 
   onPointerOnDrawerChanged: if (!pointerOnDrawer) hoverSuppressed = false
 
-  onHoverHeldChanged: {
-    if (hoverHeld) {
+  // A release clears drag hover before normal hover is delivered, and the
+  // layout may move the trigger in between. Share the crossing grace period
+  // across both inputs so the drawer cannot start closing during that handoff.
+  readonly property bool hoverOrDrag: hoverHeld || dropHovered || draggingChild || incomingGroup !== null
+  onHoverOrDragChanged: {
+    if (hoverOrDrag) {
       hoverGrace = true
       hoverGraceTimer.stop()
     } else {
