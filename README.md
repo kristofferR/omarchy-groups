@@ -2,7 +2,7 @@
 
 Organize your Omarchy bar into independent icon groups. Drawers open below the bar, so your other icons stay in place. Drag widgets into groups, back onto the bar, or directly between groups.
 
-![Omarchy menu bar with Sound & media hovered, revealing its four widgets below the bar](preview.png)
+<img src="preview.png" alt="Omarchy menu bar with Sound &amp; media hovered, revealing its four widgets below the bar" width="400" height="124">
 
 ## Highlights
 
