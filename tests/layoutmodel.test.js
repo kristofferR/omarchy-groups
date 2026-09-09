@@ -545,3 +545,14 @@ console.log('group settings preserve widgets, settings, and stable identities')
   assert(!Layout.hasSettingsShortcut(config, NOOK))
 }
 console.log('fresh setup, automatic identities, widget selection and last-group recovery passed')
+
+// Reading host-owned sections must not depend on JavaScript Array methods.
+{
+  const entry = {id: NOOK, groupId: "existing"}
+  const config = {bar: {layout: {left: {0: entry, length: 1}, right: {0: NOOK, length: 1}}}}
+  assert.equal(Layout.needsGroupIds(config, NOOK), true)
+  config.bar.layout.right[0] = {id: NOOK, groupId: "other"}
+  assert.equal(Layout.needsGroupIds(config, NOOK), false)
+  config.bar.layout.right[0].groupId = "existing"
+  assert.equal(Layout.needsGroupIds(config, NOOK), true)
+}

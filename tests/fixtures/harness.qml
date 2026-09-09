@@ -449,7 +449,7 @@ ShellRoot {
       var file = namedChild(settingsPanel, "groupsConfig")
       file.path = Quickshell.env("GROUPS_TEST_CONFIG")
       file.setText(JSON.stringify({version: 1, bar: {layout: {left: [], center: [], right: ["kristofferr.groups"]}}, plugins: [{id: "other-service", setting: "keep"}]}))
-      namedChild(settingsPanel, "widgetCatalog").command = ["printf", "%s", JSON.stringify([{id: "w.new", name: "New", kinds: ["bar-widget"]}])]
+      namedChild(settingsPanel, "widgetCatalog").command = ["printf", "%s", JSON.stringify([{id: "w.new", name: "New", kinds: ["bar-widget"]}, {id: "w.no-kinds"}, {id: "w.null-kinds", kinds: null}])]
       settingsPanel.open("{}")
       next()
     } else if (stage === 7) {
@@ -462,6 +462,16 @@ ShellRoot {
       if (saved.bar.layout.right[0].label !== "Saved to disk" || saved.bar.layout.right[0].items[0].id !== "w.new")
         return fail("scoped settings did not persist name and widgets")
       if (saved.plugins[0].setting !== "keep") return fail("scoped settings overwrote unrelated service settings")
+      if (settingsPanel.widgetOnly("w.no-kinds") || settingsPanel.widgetOnly("w.null-kinds"))
+        return fail("catalog entries without kinds were treated as widgets")
+      settingsPanel.removeGroup()
+      if (settingsPanel.groups.length) return fail("incomplete catalog prevented removing a group")
+      settingsPanel.addGroup()
+      settingsPanel.addWidget(settingsPanel.availableWidgets.find(function(choice) { return choice.id === "w.new" }))
+      if (settingsPanel.groupWidgets.length !== 1) return fail("reload fixture must start with a selected widget")
+      var configFile = namedChild(settingsPanel, "groupsConfig")
+      configFile.setText(JSON.stringify({version: 1, plugins: []}))
+      configFile.reload()
       settingsPanel.close()
       secondWidget.settings = {groupId: "second", items: [], trigger: "hover"}
       secondWidget.close()
@@ -476,6 +486,8 @@ ShellRoot {
     } else if (stage === 8) {
       if (ticksInStage < 6) return
       if (secondWidget.hoverGrace || secondWidget.expanded) return fail("drop grace did not expire after pointer left")
+      if (!settingsPanel.hasSelection || settingsPanel.currentConfig.bar || settingsPanel.groupWidgets.length !== 0)
+        return fail("watched reload without a bar did not clear displayed widgets")
       pass()
     }
   }

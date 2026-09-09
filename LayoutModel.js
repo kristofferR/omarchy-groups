@@ -393,15 +393,18 @@ function needsGroupIds(config, moduleName) {
   var layout = config && config.bar ? config.bar.layout : null
   if (!layout) return false
   var seen = []
-  return SECTIONS.some(function(section) {
-    return (layout[section] || []).some(function(entry) {
-      if (entryIdOf(entry) !== moduleName) return false
+  // Host-owned Qt lists can expose indexes and length without Array methods.
+  for (var section = 0; section < SECTIONS.length; section++) {
+    var entries = layout[SECTIONS[section]] || []
+    for (var i = 0; i < entries.length; i++) {
+      var entry = entries[i]
+      if (entryIdOf(entry) !== moduleName) continue
       var id = String(entry.groupId || "")
       if (!id || seen.indexOf(id) !== -1) return true
       seen.push(id)
-      return false
-    })
-  })
+    }
+  }
+  return false
 }
 
 function ensureGroupIds(config, moduleName) {

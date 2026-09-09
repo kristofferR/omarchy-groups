@@ -9,7 +9,7 @@ function load(name, imports = {}) {
   vm.runInContext(source, context)
   return context
 }
-const Icons = load('GroupIcons.js', {Lucide: load('LucideIcons.js')})
+const Icons = load('GroupIcons.js', {Lucide: load('LucideIcons.js'), SearchTerms: load('LucideKeywords.js')})
 assert(Icons.names.length > 1800)
 assert.deepEqual(Array.from(Icons.names.slice(0, 9)), ['windows', 'development', 'input', 'sound', 'devices', 'display', 'appearance', 'maintenance', 'group'])
 assert.equal(Icons.search(' ROCKET ')[0], 'rocket')

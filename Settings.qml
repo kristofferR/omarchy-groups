@@ -51,7 +51,7 @@ Item {
   readonly property bool settingsShortcut: Layout.hasSettingsShortcut(currentConfig, pluginId)
   readonly property var selectedGroup: groups.find(function(group) { return group.id === selectedId }) || null
   readonly property var groupWidgets: {
-    if (!currentConfig || !hasSelection) return []
+    if (!currentConfig || !currentConfig.bar || !hasSelection) return []
     var found = Layout.findDrawerEntry(currentConfig.bar.layout, pluginId, selectedId)
     if (!found) return []
     return (found.entry.items || []).map(function(entry, index) {
@@ -83,7 +83,10 @@ Item {
         try {
           var plugins = JSON.parse(text)
           if (!Array.isArray(plugins)) throw new Error("Invalid catalog")
-          root.pluginCatalog = plugins
+          root.pluginCatalog = plugins.map(function(plugin) {
+            return {id: plugin.id, name: plugin.name || plugin.id,
+              kinds: Array.isArray(plugin.kinds) ? plugin.kinds : []}
+          })
           root.catalogLoaded = true
         } catch (error) { root.catalogError = "Could not load installed widgets. Try again." }
       }

@@ -19,6 +19,7 @@ Organize your Omarchy bar into independent icon groups. Drawers open below the b
 
 - Omarchy Quattro with the native shell plugin system
 - The standard Omarchy bar
+- Qt 6.8 or newer, provided by current Omarchy releases
 
 The underlying Quickshell and Hyprland support ships with Omarchy. No additional packages, background services, or shell patches are required. The top bar is the supported and verified configuration.
 

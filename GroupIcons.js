@@ -1,5 +1,6 @@
 .pragma library
 .import "LucideIcons.js" as Lucide
+.import "LucideKeywords.js" as SearchTerms
 
 // Fixed viewboxes avoid Nerd Font glyph bearings shifting icons off center.
 var paths = {
@@ -24,7 +25,7 @@ function search(query) {
   if (!text) return names
   var tokens = text.split(/\s+/)
   var matches = names.filter(function(name) {
-    var keywords = (name + " " + (Lucide.keywords[name] || "")).toLowerCase()
+    var keywords = (name + " " + (SearchTerms.keywords[name] || "")).toLowerCase()
     return tokens.every(function(token) { return keywords.indexOf(token) !== -1 })
   })
   var exact = matches.indexOf(text)
