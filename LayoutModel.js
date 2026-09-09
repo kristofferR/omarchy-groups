@@ -1,5 +1,61 @@
 .pragma library
 
+// Keep delegates alive across layout edits. Reserve exact matches first so
+// changing one of several instances does not steal an unchanged instance.
+// JSON stays a string role: ListModel otherwise turns nested settings arrays
+// into nested models, changing the widget settings contract.
+function syncEntries(model, entries) {
+  var rows = []
+  var used = []
+  var nextKey = 0
+  for (var i = 0; i < model.count; i++) {
+    var row = model.get(i)
+    rows.push({ key: row.instanceKey, json: row.entryJson, id: entryIdOf(JSON.parse(row.entryJson)) })
+    nextKey = Math.max(nextKey, row.instanceKey + 1)
+  }
+  var wanted = entries.map(function(entry) {
+    return { id: entryIdOf(entry), json: JSON.stringify(entry), match: -1 }
+  })
+  for (var exact = 0; exact < wanted.length; exact++) {
+    for (var old = 0; old < rows.length; old++) {
+      if (!used[old] && rows[old].json === wanted[exact].json) {
+        wanted[exact].match = old
+        used[old] = true
+        break
+      }
+    }
+  }
+  for (var n = 0; n < wanted.length; n++) {
+    var item = wanted[n]
+    if (item.match < 0) {
+      for (var candidate = 0; candidate < rows.length; candidate++) {
+        if (!used[candidate] && rows[candidate].id === item.id) {
+          item.match = candidate
+          used[candidate] = true
+          break
+        }
+      }
+    }
+    item.key = item.match < 0 ? nextKey++ : rows[item.match].key
+  }
+  for (var remove = rows.length - 1; remove >= 0; remove--) {
+    if (!used[remove]) model.remove(remove)
+  }
+  for (var target = 0; target < wanted.length; target++) {
+    var entry = wanted[target]
+    var source = target
+    while (source < model.count && model.get(source).instanceKey !== entry.key) source++
+    if (source === model.count) {
+      model.insert(target, { instanceKey: entry.key, entryJson: entry.json })
+    } else {
+      if (source !== target) model.move(source, target, 1)
+      if (model.get(target).entryJson !== entry.json)
+        model.setProperty(target, "entryJson", entry.json)
+    }
+  }
+}
+
+
 // Every shell.json edit the drawer makes, as pure functions over a config
 // object. BarWidget.qml owns the bindings, timers and injection; this owns the
 // data. Nothing here reads QML state, so node can run it.

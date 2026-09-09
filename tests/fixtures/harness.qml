@@ -359,6 +359,30 @@ ShellRoot {
       next()
     } else if (stage === 3) {
       if (widget.cells.length !== 2 || !widget.cells[0].childItem || !widget.cells[1].childItem) return
+      var firstCell = widget.cells[0]
+      var secondCell = widget.cells[1]
+      var firstItem = firstCell.childItem
+      var secondItem = secondCell.childItem
+      // A settings reinjection hands Groups its scoped API again. Its native
+      // host and loaded children must survive that presentation-only change.
+      widget.bar = scopedShell
+      if (widget.hostBar !== mockBar || widget.cells[0].childItem !== firstItem)
+        return fail("scoped API reinjection unloaded the widget registry")
+      widget.bar = mockBar
+      widget.settings = {groupId: "first", trigger: "click", items: [
+        "w.second", {id: "w.first", options: {values: [1, 2]}}
+      ]}
+      if (widget.cells[0] !== secondCell || widget.cells[1] !== firstCell
+          || widget.cells[1].childItem !== firstItem || widget.cells[0].childItem !== secondItem)
+        return fail("reorder recreated a hosted widget")
+      if (!Array.isArray(firstItem.settings.options.values) || firstItem.settings.options.values[1] !== 2)
+        return fail("model changed nested settings into a ListModel")
+      widget.settings = {groupId: "first", trigger: "click", items: ["w.first"]}
+      if (widget.cells.length !== 1 || widget.cells[0] !== firstCell || widget.cells[0].childItem !== firstItem)
+        return fail("removal recreated the remaining widget")
+      widget.settings = {groupId: "first", trigger: "click", items: ["w.first", "w.second"]}
+      if (widget.cells[0] !== firstCell || widget.cells[0].childItem !== firstItem)
+        return fail("insertion recreated the existing widget")
       widget.cells[0].childItem.open()
       if (widget.openChildCount !== 1) return fail("first popup did not hold drawer open")
       widget.cells[1].childItem.open()

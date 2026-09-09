@@ -1,4 +1,5 @@
 import QtQuick
+import QtQml.Models
 import Quickshell
 import Quickshell.Io
 import Quickshell.Wayland
@@ -35,16 +36,23 @@ BarWidget {
     }
     return null
   }
+  // The shell reinjects the scoped API whenever settings change. Retain the
+  // resolved host separately so that reinjection cannot unload the drawer's
+  // widget registry, destroy its children, and load them all again.
+  property var resolvedHost: null
+  readonly property var hostBar: bar && bar.moduleSlots ? bar : resolvedHost
   function connectHost() {
-    if (!bar || bar.moduleSlots || !barWindow) return
+    if (!bar) { resolvedHost = null; return }
+    if (bar.moduleSlots) { resolvedHost = bar; return }
+    if (!barWindow) return
     var host = nativeBarIn(barWindow.contentItem)
-    if (host) bar = host
+    if (host) resolvedHost = host
   }
-  onBarChanged: Qt.callLater(connectHost)
+  onBarChanged: connectHost()
   Timer {
     interval: 200
     repeat: true
-    running: root.bar && !root.bar.moduleSlots && root.barWindow !== null
+    running: root.bar && !root.hostBar && root.barWindow !== null
     onTriggered: root.connectHost()
   }
 
@@ -63,8 +71,8 @@ BarWidget {
   readonly property int animationDuration: settings && settings.duration !== undefined
     ? Math.max(0, Number(settings.duration)) : 0
 
-  readonly property var widgetRegistry: bar && bar.barWidgetRegistry ? bar.barWidgetRegistry.widgets : ({})
-  readonly property var pluginRegistry: bar && bar.shell ? bar.shell.pluginRegistry : null
+  readonly property var widgetRegistry: hostBar && hostBar.barWidgetRegistry ? hostBar.barWidgetRegistry.widgets : ({})
+  readonly property var pluginRegistry: hostBar && hostBar.shell ? hostBar.shell.pluginRegistry : null
 
   readonly property var missingIds: {
     var registry = root.pluginRegistry
@@ -76,7 +84,7 @@ BarWidget {
       root.widgetRegistry, root.moduleName, registry ? registry.scanning : false)
   }
 
-  readonly property var shellConfig: bar && bar.shell ? bar.shell.shellConfig : null
+  readonly property var shellConfig: hostBar && hostBar.shell ? hostBar.shell.shellConfig : null
   onShellConfigChanged: Qt.callLater(ensureIdentities)
 
   function ensureIdentities() {
@@ -87,18 +95,18 @@ BarWidget {
   // A transparent bar picks barForeground to contrast with the wallpaper, not
   // with this card, so the card stays on the theme and hosted widgets are
   // repainted to match it.
-  readonly property color cardBackground: bar ? bar.background : Color.background
-  readonly property color hostedForeground: bar ? bar.themeForeground : Color.foreground
+  readonly property color cardBackground: hostBar ? hostBar.background : Color.background
+  readonly property color hostedForeground: hostBar ? hostBar.themeForeground : Color.foreground
 
   // The bar owns the rules for what counts as a custom module, so ask it.
   function customTypeOf(entry) {
-    if (!bar || typeof bar.customModuleType !== "function") return ""
-    return String(bar.customModuleType(entry) || "")
+    if (!hostBar || typeof hostBar.customModuleType !== "function") return ""
+    return String(hostBar.customModuleType(entry) || "")
   }
 
   function customSourceOf(entry) {
-    if (!bar || typeof bar.customModuleSource !== "function") return ""
-    return String(bar.customModuleSource(entry) || "")
+    if (!hostBar || typeof hostBar.customModuleSource !== "function") return ""
+    return String(hostBar.customModuleSource(entry) || "")
   }
 
   // A plugin that also ships a service reads plugins[] itself.
@@ -122,7 +130,7 @@ BarWidget {
   }
 
   readonly property var ownSlot: {
-    var slots = bar && bar.moduleSlots ? bar.moduleSlots : []
+    var slots = hostBar && hostBar.moduleSlots ? hostBar.moduleSlots : []
     for (var i = 0; i < slots.length; i++) {
       if (slots[i] && slots[i].activeItem === root) return slots[i]
     }
@@ -130,7 +138,7 @@ BarWidget {
   }
   readonly property string region: ownSlot ? String(ownSlot.region || "") : ""
   readonly property bool reversed: region === "right"
-  readonly property string barPosition: bar ? String(bar.position || "top") : "top"
+  readonly property string barPosition: hostBar ? String(hostBar.position || "top") : "top"
 
   readonly property var barWindow: root.QsWindow.window
   readonly property real screenAlong: {
@@ -198,7 +206,7 @@ BarWidget {
 
   function openSettings() {
     close()
-    if (bar && bar.shell) bar.shell.summon(moduleName, JSON.stringify(isManager ? {} : {groupId: root.groupId}))
+    if (hostBar && hostBar.shell) hostBar.shell.summon(moduleName, JSON.stringify(isManager ? {} : {groupId: root.groupId}))
   }
   function open() { if (isManager) openSettings(); else latched = true }
   function close() {
@@ -213,8 +221,8 @@ BarWidget {
   }
 
   function groupPeers() {
-    return bar && typeof bar.moduleWidgets === "function"
-      ? bar.moduleWidgets(moduleName).filter(function(peer) { return peer && !peer.isManager }) : [root]
+    return hostBar && typeof hostBar.moduleWidgets === "function"
+      ? hostBar.moduleWidgets(moduleName).filter(function(peer) { return peer && !peer.isManager }) : [root]
   }
 
   function broadcastGroup(method) {
@@ -249,13 +257,13 @@ BarWidget {
     function status(): string {
       return JSON.stringify({
         childTooltipVisible: childTooltip.visible,
-        childTooltipText: childTooltip.visible && root.bar ? root.bar.tooltipText : "",
+        childTooltipText: childTooltip.visible && root.hostBar ? root.hostBar.tooltipText : "",
         dragging: root.draggingChild,
-        dragFeedback: root.draggingChild && root.bar ? {
-          imageReady: String(root.bar.barDragImageUrl) !== "",
-          x: root.bar.barDragScreenX, y: root.bar.barDragScreenY,
-          offsetX: root.bar.barDragOffsetX, offsetY: root.bar.barDragOffsetY,
-          marker: root.bar.barDragTargetGeometry
+        dragFeedback: root.draggingChild && root.hostBar ? {
+          imageReady: String(root.hostBar.barDragImageUrl) !== "",
+          x: root.hostBar.barDragScreenX, y: root.hostBar.barDragScreenY,
+          offsetX: root.hostBar.barDragOffsetX, offsetY: root.hostBar.barDragOffsetY,
+          marker: root.hostBar.barDragTargetGeometry
         } : null,
         groupId: root.groupId,
         label: root.groupLabel,
@@ -330,7 +338,18 @@ BarWidget {
 
   property var cells: []
 
-  onEntriesChanged: cells = []
+  ListModel { id: drawerModel }
+  onEntriesChanged: syncDrawerEntries()
+
+  function syncDrawerEntries() {
+    Layout.syncEntries(drawerModel, entries)
+    // Index signals fire during model moves. Collect the final order after
+    // reconciliation, including unchanged delegates which emit no signal.
+    var repeater = root.vertical ? columnRepeater : rowRepeater
+    var next = []
+    for (var i = 0; i < repeater.count; i++) next.push(repeater.itemAt(i))
+    cells = next
+  }
 
   function setCell(index, cell) {
     var next = cells.slice()
@@ -363,18 +382,18 @@ BarWidget {
   // Bar.qml commits its own reorder and knows nothing about drawers, so a drop
   // here would only park the entry beside the chevron.
 
-  readonly property bool dragActive: !isManager && bar && bar.barDragSource !== null
-    && bar.barDragSource !== ownSlot && !anyGroupDragging
+  readonly property bool dragActive: !isManager && hostBar && hostBar.barDragSource !== null
+    && hostBar.barDragSource !== ownSlot && !anyGroupDragging
   // Without this both monitors' drawers would light up.
-  readonly property bool dragInThisWindow: dragActive && bar.barDragWindow
-    && barWindow === bar.barDragWindow
+  readonly property bool dragInThisWindow: dragActive && hostBar.barDragWindow
+    && barWindow === hostBar.barDragWindow
   readonly property point dragPoint: dragInThisWindow
-    ? root.mapFromItem(null, bar.barDragSceneX, bar.barDragSceneY) : Qt.point(-1, -1)
+    ? root.mapFromItem(null, hostBar.barDragSceneX, hostBar.barDragSceneY) : Qt.point(-1, -1)
   readonly property bool dropOnChevron: dragInThisWindow
     && dragPoint.x >= 0 && dragPoint.x <= width
     && dragPoint.y >= 0 && dragPoint.y <= height
   readonly property bool dropOnCard: dragInThisWindow && revealProgress > 0.01
-    && withinCard(bar.barDragSceneX, bar.barDragSceneY)
+    && withinCard(hostBar.barDragSceneX, hostBar.barDragSceneY)
   readonly property bool dropHovered: dropOnChevron || dropOnCard
 
   // Across the bar axis, anything past the bar's thickness is over the strip.
@@ -393,10 +412,10 @@ BarWidget {
   property int armedIndex: -1
 
   onDropHoveredChanged: {
-    if (!bar) return
+    if (!hostBar) return
     if (dropHovered) {
       armedId = dragSourceId()
-    } else if (bar.barDragSource) {
+    } else if (hostBar.barDragSource) {
       armedId = ""                                // pointer left again, still dragging
       armedIndex = -1
       caretIndex = -1
@@ -406,13 +425,13 @@ BarWidget {
   // Over the card the pointer has left the bar window, so `barDragTarget` never
   // changes and the handler watching it never fires.
   onDragPointChanged: {
-    if (!dropOnCard || !bar) return
-    armedIndex = insertionIndexAt(vertical ? bar.barDragSceneY : bar.barDragSceneX)
+    if (!dropOnCard || !hostBar) return
+    armedIndex = insertionIndexAt(vertical ? hostBar.barDragSceneY : hostBar.barDragSceneX)
     caretIndex = armedIndex
   }
 
   function dragSourceId() {
-    var source = bar ? bar.barDragSource : null
+    var source = hostBar ? hostBar.barDragSource : null
     var id = source ? String(source.moduleName || "") : ""
     // Never swallow this drawer, or a second drawer that shares its id.
     if (!id || id === moduleName) return ""
@@ -420,25 +439,25 @@ BarWidget {
   }
 
   Connections {
-    target: root.bar
+    target: root.hostBar
 
     // Null the bar's target so its release is a no-op. ModuleSlot.onReleased reads
     // it into a local before clearBarDrag(), and the bar's write is synchronous:
-    // it reassigns layoutConfig, rebuilding every widget on every monitor, this one
-    // included. Watches the target rather than the pointer because Bar.qml sets
+    // it reassigns layoutConfig and may destroy this source widget. Watch the
+    // target rather than the pointer because Bar.qml sets
     // barDragSceneX first and the target a few lines later.
     function onBarDragTargetChanged() {
-      if (!root.dropHovered || !root.bar || root.bar.barDragTarget === null) return
+      if (!root.dropHovered || !root.hostBar || root.hostBar.barDragTarget === null) return
       root.armedIndex = root.dropOnCard
-        ? root.insertionIndexAt(root.vertical ? root.bar.barDragSceneY : root.bar.barDragSceneX)
+        ? root.insertionIndexAt(root.vertical ? root.hostBar.barDragSceneY : root.hostBar.barDragSceneX)
         : -1
       root.caretIndex = root.armedIndex
-      root.bar.barDragTarget = null            // re-enters, and returns at the null check
+      root.hostBar.barDragTarget = null            // re-enters, and returns at the null check
     }
 
     // Release and cancel look identical here, so an abandoned drag lands.
     function onBarDragSourceChanged() {
-      if (!root.bar || root.bar.barDragSource) return
+      if (!root.hostBar || root.hostBar.barDragSource) return
       var id = root.armedId
       var index = root.armedIndex
       root.armedId = ""
@@ -485,10 +504,10 @@ BarWidget {
   // The bar normalizes the tray position and splits the center into separate
   // rows. Resolve a visible slot back to the saved entry by ID occurrence.
   function slotLayoutIndex(slot) {
-    if (!slot || !bar || !shellConfig || !shellConfig.bar) return -1
-    var candidates = bar.moduleSlots.filter(function(peer) {
+    if (!slot || !hostBar || !shellConfig || !shellConfig.bar) return -1
+    var candidates = hostBar.moduleSlots.filter(function(peer) {
       return peer && peer.region === slot.region && peer.moduleName === slot.moduleName
-        && bar.slotWindow(peer) === barWindow
+        && hostBar.slotWindow(peer) === barWindow
     })
     candidates.sort(function(a, b) {
       var pa = a.mapToItem(null, 0, 0)
@@ -506,10 +525,10 @@ BarWidget {
   }
 
   function barDestinationAt(point) {
-    if (!bar || !barWindow) return null
+    if (!hostBar || !barWindow) return null
     // Use the native hit testing, with the bar window as the coordinate space.
     // Passing the hosted proxy would instead restrict the search to its drawer.
-    var drop = bar.moduleDropAtScene(point, null)
+    var drop = hostBar.moduleDropAtScene(point, null)
     if (!drop) return null
     var index = slotLayoutIndex(drop.slot)
     return index < 0 ? null : {section: drop.slot.region,
@@ -519,22 +538,22 @@ BarWidget {
   readonly property bool draggingChild: draggingIndex >= 0
 
   function beginChildDrag(cell, pressPoint) {
-    if (!cell || !barWindow || !bar || typeof bar.captureBarDragGhost !== "function"
-        || typeof bar.moduleDropAtScene !== "function") return
+    if (!cell || !barWindow || !hostBar || typeof hostBar.captureBarDragGhost !== "function"
+        || typeof hostBar.moduleDropAtScene !== "function") return
     draggingIndex = cell.index
     childDragSlot = cell.nativeDragSlot
     caretIndex = -1
     draggingOutside = false
     // Share the stock bar's overlay ghost and insertion marker. Keep the real
     // widget in its drawer so its pointer grab and native actions stay intact.
-    bar.clearBarDrag()
-    bar.clearTooltip()
-    bar.barDragWindow = barWindow
-    bar.barDragScreen = barWindow.screen
-    bar.barDragOffsetX = pressPoint.x
-    bar.barDragOffsetY = pressPoint.y
-    bar.barDragSource = childDragSlot
-    bar.captureBarDragGhost(childDragSlot)
+    hostBar.clearBarDrag()
+    hostBar.clearTooltip()
+    hostBar.barDragWindow = barWindow
+    hostBar.barDragScreen = barWindow.screen
+    hostBar.barDragOffsetX = pressPoint.x
+    hostBar.barDragOffsetY = pressPoint.y
+    hostBar.barDragSource = childDragSlot
+    hostBar.captureBarDragGhost(childDragSlot)
   }
 
   // The card's edge is flush against the bar, so testing the card's rectangle
@@ -553,7 +572,7 @@ BarWidget {
   }
 
   function updateChildDrag(scenePoint) {
-    if (!draggingChild || !bar || bar.barDragSource !== childDragSlot) return
+    if (!draggingChild || !hostBar || hostBar.barDragSource !== childDragSlot) return
     var global = strip.contentItem.mapToGlobal(scenePoint.x, scenePoint.y)
     childDragPoint = barWindow.contentItem.mapFromGlobal(global.x, global.y)
     var previous = childDropGroup
@@ -571,15 +590,15 @@ BarWidget {
       && across <= start + stripThickness
       ? insertionIndexAt(vertical ? scenePoint.y : scenePoint.x) : -1
 
-    var screenPoint = bar.barDragScreenPoint(childDragPoint)
-    bar.barDragSceneX = childDragPoint.x
-    bar.barDragSceneY = childDragPoint.y
-    bar.barDragScreenX = screenPoint.x
-    bar.barDragScreenY = screenPoint.y
-    bar.barDragTarget = childDropBar ? childDropBar.slot : null
-    bar.barDragAfter = childDropBar ? childDropBar.after : false
-    bar.barDragTargetGeometry = childDropBar
-      ? bar.dropMarkerRect(childDropBar.slot, childDropBar.after) : null
+    var screenPoint = hostBar.barDragScreenPoint(childDragPoint)
+    hostBar.barDragSceneX = childDragPoint.x
+    hostBar.barDragSceneY = childDragPoint.y
+    hostBar.barDragScreenX = screenPoint.x
+    hostBar.barDragScreenY = screenPoint.y
+    hostBar.barDragTarget = childDropBar ? childDropBar.slot : null
+    hostBar.barDragAfter = childDropBar ? childDropBar.after : false
+    hostBar.barDragTargetGeometry = childDropBar
+      ? hostBar.dropMarkerRect(childDropBar.slot, childDropBar.after) : null
   }
 
   function endChildDrag() {
@@ -605,7 +624,7 @@ BarWidget {
   }
 
   function cancelChildDrag() {
-    if (childDragSlot && bar && bar.barDragSource === childDragSlot) bar.clearBarDrag()
+    if (childDragSlot && hostBar && hostBar.barDragSource === childDragSlot) hostBar.clearBarDrag()
     childDragSlot = null
     if (childDropGroup) childDropGroup.caretIndex = -1
     childDropGroup = null
@@ -617,7 +636,7 @@ BarWidget {
 
 
   function mutate(change) {
-    var host = bar && bar.shell ? bar.shell : null
+    var host = hostBar && hostBar.shell ? hostBar.shell : null
     if (!host || typeof host.mutateShellConfig !== "function") return
     host.mutateShellConfig(function(config) {
       if (!Util.isPlainObject(config.bar) || !Util.isPlainObject(config.bar.layout)) return
@@ -633,7 +652,7 @@ BarWidget {
   }
 
   function entryOnBar(id) {
-    var layout = bar && bar.layoutConfig ? bar.layoutConfig : null
+    var layout = hostBar && hostBar.layoutConfig ? hostBar.layoutConfig : null
     if (!layout) return null
     var sections = ["left", "center", "right"]
     for (var s = 0; s < sections.length; s++) {
@@ -673,7 +692,10 @@ BarWidget {
     reconcileTimer.restart()
   }
   onStrandedIdsChanged: if (strandedIds.length > 0) reconcileTimer.restart()
-  Component.onCompleted: if (missingIds.length > 0 || strandedIds.length > 0) reconcileTimer.restart()
+  Component.onCompleted: {
+    syncDrawerEntries()
+    if (missingIds.length > 0 || strandedIds.length > 0) reconcileTimer.restart()
+  }
 
   Timer {
     id: reconcileTimer
@@ -699,9 +721,9 @@ BarWidget {
   // across windows, and takes the last registered. Re-registering the chevron
   // after the strip's widgets keeps it first in that scan.
   function claimChevronClicks() {
-    if (!bar || typeof bar.unregisterClickTarget !== "function") return
-    bar.unregisterClickTarget(chevron)
-    bar.registerClickTarget(chevron)
+    if (!hostBar || typeof hostBar.unregisterClickTarget !== "function") return
+    hostBar.unregisterClickTarget(chevron)
+    hostBar.registerClickTarget(chevron)
   }
 
   onCellsChanged: Qt.callLater(claimChevronClicks)
@@ -760,7 +782,7 @@ BarWidget {
         textFormat: Text.PlainText
         text: root.groupLabel + " · " + root.entries.length + " plugins"
         color: Color.tooltip.text
-        font.family: root.bar ? root.bar.fontFamily : Style.font.family
+        font.family: root.hostBar ? root.hostBar.fontFamily : Style.font.family
         font.pixelSize: Style.font.body
       }
     }
@@ -769,7 +791,7 @@ BarWidget {
   WidgetButton {
     id: chevron
     anchors.fill: parent
-    bar: root.bar
+    bar: root.hostBar
     text: ""
     labelVisible: false
     hasVisualContent: true
@@ -779,6 +801,9 @@ BarWidget {
       height: Style.space(14)
       sourceSize.width: width * (root.barWindow && root.barWindow.screen ? root.barWindow.screen.devicePixelRatio : 1)
       sourceSize.height: height * (root.barWindow && root.barWindow.screen ? root.barWindow.screen.devicePixelRatio : 1)
+      // Hover changes the SVG colour. Keep the current texture until the
+      // replacement is ready instead of clearing the icon for a frame.
+      retainWhileLoading: true
       source: GroupIcons.source(root.groupIcon, String(chevron.active ? chevron.activeColor : chevron.foreground))
     }
     fixedWidth: Style.space(28)
@@ -813,9 +838,9 @@ BarWidget {
 
   PopupWindow {
     id: childTooltip
-    readonly property var target: root.bar ? root.bar.tooltipTarget : null
-    visible: root.revealed && !root.anyGroupDragging && root.bar && root.bar.tooltipShown === true
-      && target && root.bar.targetBelongsToWindow(target, strip)
+    readonly property var target: root.hostBar ? root.hostBar.tooltipTarget : null
+    visible: root.revealed && !root.anyGroupDragging && root.hostBar && root.hostBar.tooltipShown === true
+      && target && root.hostBar.targetBelongsToWindow(target, strip)
     color: "transparent"
     implicitWidth: Math.ceil(childTooltipBubble.implicitWidth)
     implicitHeight: Math.ceil(childTooltipBubble.implicitHeight)
@@ -851,9 +876,9 @@ BarWidget {
         id: childTooltipLabel
         anchors.centerIn: parent
         textFormat: Text.PlainText
-        text: root.bar ? root.bar.tooltipText : ""
+        text: root.hostBar ? root.hostBar.tooltipText : ""
         color: Color.tooltip.text
-        font.family: root.bar ? root.bar.fontFamily : Style.font.family
+        font.family: root.hostBar ? root.hostBar.fontFamily : Style.font.family
         font.pixelSize: Style.font.body
       }
     }
@@ -864,7 +889,7 @@ BarWidget {
   // widget clicks keep working. Child panels own dismissal while they are open.
   Variants {
     model: root.expanded && root.openChildCount === 0 && !root.anyGroupDragging
-      && !(root.bar && root.bar.barDragSource) ? Quickshell.screens : []
+      && !(root.hostBar && root.hostBar.barDragSource) ? Quickshell.screens : []
     delegate: Component {
       PanelWindow {
         required property var modelData
@@ -1029,12 +1054,13 @@ BarWidget {
           anchors.verticalCenter: parent.verticalCenter
 
           Repeater {
-            model: root.vertical ? [] : root.entries
+            id: rowRepeater
+            model: root.vertical ? null : drawerModel
             DrawerItem {
               anchors.verticalCenter: parent.verticalCenter
-              required property var modelData
+              required property string entryJson
               required property int index
-              entry: modelData
+              entry: JSON.parse(entryJson)
               position: index
             }
           }
@@ -1048,12 +1074,13 @@ BarWidget {
           anchors.horizontalCenter: parent.horizontalCenter
 
           Repeater {
-            model: root.vertical ? root.entries : []
+            id: columnRepeater
+            model: root.vertical ? drawerModel : null
             DrawerItem {
               anchors.horizontalCenter: parent.horizontalCenter
-              required property var modelData
+              required property string entryJson
               required property int index
-              entry: modelData
+              entry: JSON.parse(entryJson)
               position: index
             }
           }
@@ -1131,20 +1158,18 @@ BarWidget {
 
     // Captured: during teardown `root` is gone before these destruction handlers run.
     readonly property var owner: root
-    readonly property var host: root.bar
+    readonly property var host: root.hostBar
 
     required property var entry
     required property int position
     readonly property int index: position
 
-    // The Repeater hands entries over as QVariant maps, whose keys a plain for-in
-    // does not enumerate. A JSON round-trip makes them ordinary objects again.
-    readonly property var plainEntry: entry ? JSON.parse(JSON.stringify(entry)) : ({})
-    readonly property string childId: String(plainEntry.id || "")
+    // entryJson is decoded by the delegate into ordinary objects and arrays.
+    readonly property string childId: String(entry.id || "")
     readonly property var childSettings: {
       var copy = ({})
-      for (var key in plainEntry) {
-        if (key !== "id") copy[key] = plainEntry[key]
+      for (var key in entry) {
+        if (key !== "id") copy[key] = entry[key]
       }
       return copy
     }
@@ -1195,10 +1220,10 @@ BarWidget {
       if ("bar" in target) {
         var metadata = root.widgetRegistry[cell.childId]
         var firstParty = metadata && metadata.metadata && metadata.metadata.firstParty === true
-        target.bar = firstParty || !root.bar || typeof root.bar.pluginBarApiFor !== "function"
-          ? cell.host : root.bar.pluginBarApiFor(cell.custom ? "bar-entry:" + cell.childId : cell.childId, cell.childId, !cell.custom)
+        target.bar = firstParty || !root.hostBar || typeof root.hostBar.pluginBarApiFor !== "function"
+          ? cell.host : root.hostBar.pluginBarApiFor(cell.custom ? "bar-entry:" + cell.childId : cell.childId, cell.childId, !cell.custom)
       }
-      if ("entry" in target) target.entry = cell.plainEntry
+      if ("entry" in target) target.entry = cell.entry
       if ("moduleName" in target) target.moduleName = cell.childId
       if ("settings" in target) target.settings = cell.childSettings
     }
@@ -1210,14 +1235,14 @@ BarWidget {
     // follows the theme. A readonly property cannot be rebound and keeps the
     // bar's colour.
     function paintForTheCard(item) {
-      if (!item || !root.bar) return
+      if (!item || !root.hostBar) return
       // Only when the bar has moved off the theme colour. Rebinding replaces
       // the widget's own binding, so leave every widget alone when there is
       // nothing to correct.
-      if (Qt.colorEqual(root.bar.barForeground, root.hostedForeground)) return
+      if (Qt.colorEqual(root.hostBar.barForeground, root.hostedForeground)) return
       if ("foreground" in item) {
         try {
-          if (Qt.colorEqual(item.foreground, root.bar.barForeground))
+          if (Qt.colorEqual(item.foreground, root.hostBar.barForeground))
             item.foreground = Qt.binding(function() { return root.hostedForeground })
         } catch (e) {
         }
