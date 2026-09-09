@@ -1,5 +1,61 @@
 .pragma library
 
+// Keep delegates alive across layout edits. Reserve exact matches first so
+// changing one of several instances does not steal an unchanged instance.
+// JSON stays a string role: ListModel otherwise turns nested settings arrays
+// into nested models, changing the widget settings contract.
+function syncEntries(model, entries) {
+  var rows = []
+  var used = []
+  var nextKey = 0
+  for (var i = 0; i < model.count; i++) {
+    var row = model.get(i)
+    rows.push({ key: row.instanceKey, json: row.entryJson, id: entryIdOf(JSON.parse(row.entryJson)) })
+    nextKey = Math.max(nextKey, row.instanceKey + 1)
+  }
+  var wanted = entries.map(function(entry) {
+    return { id: entryIdOf(entry), json: JSON.stringify(entry), match: -1 }
+  })
+  for (var exact = 0; exact < wanted.length; exact++) {
+    for (var old = 0; old < rows.length; old++) {
+      if (!used[old] && rows[old].json === wanted[exact].json) {
+        wanted[exact].match = old
+        used[old] = true
+        break
+      }
+    }
+  }
+  for (var n = 0; n < wanted.length; n++) {
+    var item = wanted[n]
+    if (item.match < 0) {
+      for (var candidate = 0; candidate < rows.length; candidate++) {
+        if (!used[candidate] && rows[candidate].id === item.id) {
+          item.match = candidate
+          used[candidate] = true
+          break
+        }
+      }
+    }
+    item.key = item.match < 0 ? nextKey++ : rows[item.match].key
+  }
+  for (var remove = rows.length - 1; remove >= 0; remove--) {
+    if (!used[remove]) model.remove(remove)
+  }
+  for (var target = 0; target < wanted.length; target++) {
+    var entry = wanted[target]
+    var source = target
+    while (source < model.count && model.get(source).instanceKey !== entry.key) source++
+    if (source === model.count) {
+      model.insert(target, { instanceKey: entry.key, entryJson: entry.json })
+    } else {
+      if (source !== target) model.move(source, target, 1)
+      if (model.get(target).entryJson !== entry.json)
+        model.setProperty(target, "entryJson", entry.json)
+    }
+  }
+}
+
+
 // Every shell.json edit the drawer makes, as pure functions over a config
 // object. BarWidget.qml owns the bindings, timers and injection; this owns the
 // data. Nothing here reads QML state, so node can run it.
@@ -288,6 +344,7 @@ function updateGroup(config, moduleName, groupId, changes) {
   found.entry.label = changes.label.trim()
   found.entry.icon = changes.icon
   found.entry.trigger = changes.trigger
+  if (typeof changes.duration === "number") found.entry.duration = Math.max(0, Math.min(1000, Math.round(changes.duration)))
   if (typeof changes.showBorder === "boolean") found.entry.showBorder = changes.showBorder
   if (found.section !== changes.section) {
     if (!Array.isArray(config.bar.layout[changes.section])) config.bar.layout[changes.section] = []
@@ -309,7 +366,175 @@ function removeGroup(config, moduleName, groupId, widgetOnlyIds) {
   // reclaim can replace item objects, so read the resulting array again.
   var restored = found.entry.items || []
   config.bar.layout[found.section].splice.apply(config.bar.layout[found.section], [found.index, 1].concat(restored))
-  // Keep settings accessible even when the last drawer is removed.
+  // Leave a visible way back after removing the final group.
+  if (groupRows(config, moduleName).length === 0) setSettingsShortcut(config, moduleName, true, found.section)
   markEnabled(config, moduleName)
+  return true
+}
+
+
+function groupRows(config, moduleName) {
+  var layout = config && config.bar ? config.bar.layout : null
+  var rows = []
+  if (!layout) return rows
+  SECTIONS.forEach(function(section) {
+    ;(layout[section] || []).forEach(function(entry) {
+      if (entryIdOf(entry) !== moduleName || entry.role === "manager") return
+      rows.push({id: String(entry.groupId || ""), name: entry.label || "Group",
+        icon: entry.icon || "group", section: section, trigger: entry.trigger || "hover",
+        duration: Number(entry.duration) || 0, showBorder: entry.showBorder !== false,
+        count: normalizeEntries(entry.items, moduleName).length})
+    })
+  })
+  return rows
+}
+
+function needsGroupIds(config, moduleName) {
+  var layout = config && config.bar ? config.bar.layout : null
+  if (!layout) return false
+  var seen = []
+  // Host-owned Qt lists can expose indexes and length without Array methods.
+  for (var section = 0; section < SECTIONS.length; section++) {
+    var entries = layout[SECTIONS[section]] || []
+    for (var i = 0; i < entries.length; i++) {
+      var entry = entries[i]
+      if (entryIdOf(entry) !== moduleName) continue
+      var id = String(entry.groupId || "")
+      if (!id || seen.indexOf(id) !== -1) return true
+      seen.push(id)
+    }
+  }
+  return false
+}
+
+function ensureGroupIds(config, moduleName) {
+  if (!needsGroupIds(config, moduleName)) return false
+  var layout = config.bar.layout
+  var reserved = []
+  SECTIONS.forEach(function(section) {
+    ;(layout[section] || []).forEach(function(entry) {
+      if (entryIdOf(entry) === moduleName && entry.groupId) reserved.push(String(entry.groupId))
+    })
+  })
+  var seen = []
+  SECTIONS.forEach(function(section) {
+    ;(layout[section] || []).forEach(function(entry, index) {
+      if (entryIdOf(entry) !== moduleName) return
+      if (typeof entry === "string") entry = layout[section][index] = {id: moduleName}
+      var id = String(entry.groupId || "")
+      if (!id || seen.indexOf(id) !== -1) {
+        var n = 1
+        while (reserved.indexOf("group-" + n) !== -1) n++
+        id = "group-" + n
+        entry.groupId = id
+        reserved.push(id)
+      }
+      seen.push(id)
+    })
+  })
+  return true
+}
+
+function hasSettingsShortcut(config, moduleName) {
+  var layout = config && config.bar ? config.bar.layout : null
+  return !!layout && SECTIONS.some(function(section) {
+    return (layout[section] || []).some(function(entry) {
+      return entryIdOf(entry) === moduleName && entry.role === "manager"
+    })
+  })
+}
+
+function setSettingsShortcut(config, moduleName, enabled, section) {
+  if (!config.bar || !config.bar.layout) return false
+  if (enabled === hasSettingsShortcut(config, moduleName)) return false
+  if (!enabled && groupRows(config, moduleName).length === 0) return false
+  if (enabled) {
+    var id = addGroup(config, moduleName, section || "right")
+    if (!id) return false
+    var entry = findDrawerEntry(config.bar.layout, moduleName, id).entry
+    entry.role = "manager"
+    entry.label = "Groups settings"
+  } else {
+    SECTIONS.forEach(function(key) {
+      if (Array.isArray(config.bar.layout[key])) config.bar.layout[key] = config.bar.layout[key].filter(function(entry) {
+        return entryIdOf(entry) !== moduleName || entry.role !== "manager"
+      })
+    })
+  }
+  return true
+}
+
+// Locations identify actual entries, including repeatable widgets. Keep their
+// snapshot so a concurrent layout edit cannot move a different entry instead.
+function widgetChoices(config, moduleName, catalog, targetGroupId) {
+  var rows = [], placed = [], names = ({})
+  ;(catalog || []).forEach(function(plugin) { names[plugin.id] = plugin.name || plugin.id })
+  var layout = config && config.bar ? config.bar.layout : null
+  if (!layout) return rows
+  function add(entry, section, index, group, itemIndex) {
+    var id = entryIdOf(entry)
+    if (!id || id === moduleName) return
+    placed.push(id)
+    if (group && String(group.groupId || "") === targetGroupId) return
+    rows.push({id: id, name: entry.label || names[id] || id,
+      origin: group ? (group.label || "Group") : (section.charAt(0).toUpperCase() + section.slice(1) + " bar"),
+      location: {section: section, index: index, groupId: group ? String(group.groupId || "") : null, itemIndex: itemIndex, snapshot: JSON.stringify(entry)}})
+  }
+  SECTIONS.forEach(function(section) {
+    ;(layout[section] || []).forEach(function(entry, index) {
+      if (entryIdOf(entry) === moduleName) {
+        ;(entry.items || []).forEach(function(child, itemIndex) { add(child, section, index, entry, itemIndex) })
+      } else add(entry, section, index, null, -1)
+    })
+  })
+  ;(catalog || []).forEach(function(plugin) {
+    if (plugin.id === moduleName || !plugin.kinds || plugin.kinds.indexOf("bar-widget") === -1
+        || placed.indexOf(plugin.id) !== -1) return
+    rows.push({id: plugin.id, name: plugin.name || plugin.id, origin: "Installed", location: null})
+  })
+  return rows.sort(function(a, b) { return a.name.localeCompare(b.name) })
+}
+
+// A null destination returns the widget beside its current group on the bar.
+function placeWidget(config, moduleName, destinationId, choice, widgetOnly) {
+  if (!choice || !choice.id || choice.id === moduleName) return false
+  var layout = config && config.bar ? config.bar.layout : null
+  if (!layout) return false
+  var destination = destinationId === null ? null : findDrawerEntry(layout, moduleName, destinationId)
+  if (destinationId !== null && (!destination || destination.entry.role === "manager")) return false
+  var source = null, sourceGroup = null, at = -1
+  if (choice.location) {
+    var loc = choice.location
+    source = layout[loc.section]
+    if (!Array.isArray(source) || !Number.isInteger(loc.index)) return false
+    at = loc.index
+    if (loc.itemIndex >= 0) {
+      sourceGroup = source[at]
+      if (entryIdOf(sourceGroup) !== moduleName || String(sourceGroup.groupId || "") !== loc.groupId
+          || sourceGroup === (destination && destination.entry)) return false
+      source = sourceGroup.items
+      at = loc.itemIndex
+    }
+    if (!Array.isArray(source) || !Number.isInteger(at) || at < 0 || at >= source.length
+        || JSON.stringify(source[at]) !== loc.snapshot || entryIdOf(source[at]) !== choice.id) return false
+  } else {
+    if (destinationId === null) return false
+    var alreadyPlaced = widgetChoices(config, moduleName, [], null).some(function(row) { return row.id === choice.id })
+    if (alreadyPlaced) return false
+  }
+  if (destinationId === null && !sourceGroup) return false
+  if (sourceGroup && widgetOnly) reclaim(config, sourceGroup, choice.id)
+  var entry = source ? source.splice(at, 1)[0] : {id: choice.id}
+  if (destination) {
+    if (!Array.isArray(destination.entry.items)) destination.entry.items = []
+    destination.entry.items.push(entry)
+    if (!entry.exec && !entry.source) {
+      markEnabled(config, choice.id)
+      if (Array.isArray(config.disabledPlugins)) config.disabledPlugins = config.disabledPlugins.filter(function(id) { return id !== choice.id })
+    }
+  } else {
+    layout[choice.location.section].splice(choice.location.index + 1, 0, entry)
+    unmarkEnabled(config, choice.id)
+  }
   return true
 }

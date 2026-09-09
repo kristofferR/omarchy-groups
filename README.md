@@ -2,12 +2,14 @@
 
 Organize your Omarchy bar into independent icon groups. Drawers open below the bar, so your other icons stay in place. Drag widgets into groups, back onto the bar, or directly between groups.
 
-![Groups settings](preview.png)
+<img src="preview.png" alt="Omarchy menu bar with Sound &amp; media hovered, revealing its widgets below the bar" width="384" height="216">
+
+[Watch real hover and drag-and-drop in action](https://github.com/kristofferR/omarchy-groups/releases/download/v1.0.0/omarchy-groups.gif).
 
 ## Highlights
 
 - **Independent groups.** Give each drawer a name, icon, and stable identity. Place groups on the left, center, or right.
-- **A steady bar.** Drawers open below the bar without pushing other icons around.
+- **A steady bar.** Drawers open below the bar without pushing other icons around. Moving widgets preserves unrelated widgets and their state, including on stock Omarchy.
 - **Drag and drop.** Move widgets between the bar and groups, reorder inside a drawer, or transfer directly between groups. Widget settings stay with the icon.
 - **Native interactions.** Hosted plugins keep their hover tooltips, right-click actions, scrolling, and popup panels.
 - **Hover or click.** Hover opens a drawer; click pins it. Click again or outside to dismiss.
@@ -17,8 +19,9 @@ Organize your Omarchy bar into independent icon groups. Drawers open below the b
 
 - Omarchy Quattro with the native shell plugin system
 - The standard Omarchy bar
+- Qt 6.8 or newer, provided by current Omarchy releases
 
-The underlying Quickshell and Hyprland support ships with Omarchy. The top bar is the supported and verified configuration.
+The underlying Quickshell and Hyprland support ships with Omarchy. No additional packages, background services, or shell patches are required. The top bar is the supported and verified configuration.
 
 ## Install
 
@@ -26,25 +29,15 @@ The underlying Quickshell and Hyprland support ships with Omarchy. The top bar i
 omarchy plugin add https://github.com/kristofferR/omarchy-groups.git --enable
 ```
 
-Drag an existing bar icon onto the new group to get started. Use **Add group** in settings to create more groups. For manual configuration, add entries to `bar.layout.left`, `center`, or `right` in `~/.config/omarchy/shell.json`:
+Click the new empty group to open settings. Give it a name, choose an icon, and save. In **Widgets**, choose **Add widgets** to select installed widgets or move them from the bar or another group. You can also drag existing bar icons directly onto a group.
 
-```json
-{
-  "id": "kristofferr.groups",
-  "groupId": "devices",
-  "label": "Connections & devices",
-  "icon": "devices",
-  "trigger": "hover",
-  "duration": 0,
-  "items": []
-}
-```
+Use **Add group** to create more empty groups. Group identities and plugin enablement are managed automatically. A fresh install uses your existing bar and creates no preset groups.
 
-The settings panel creates unique group IDs automatically. For hand-written entries, every group needs a unique, stable `groupId`. The searchable picker includes 1,821 choices: the original group icons plus the bundled Lucide catalog. The original nine icons stay in a separate row at the top while browsing. Search by name or keyword, such as `bluetooth`, `music`, or `rocket`. Icons work offline, and existing icon names stay compatible.
+![Add installed widgets or move them from the bar and other groups](assets/add-widgets.png)
+
+The searchable icon picker includes the original group icons and the bundled Lucide catalog. Search by name or keyword, such as `bluetooth`, `music`, or `rocket`. Icons work offline, and existing icon names stay compatible.
 
 ![Searchable icon picker](assets/icon-picker.png)
-
-Start with empty groups and drag widgets into them. Dragging manages plugin enablement and preserves settings automatically. When configuring `items` by hand, keep the hosted plugins enabled through the top-level `plugins` array, preserving any existing service settings.
 
 ### Update
 
@@ -66,6 +59,7 @@ omarchy plugin remove kristofferr.groups --yes
 | --- | --- |
 | Hover a group | Open its drawer |
 | Click a group | Pin it open; click again to close |
+| Click an empty group | Open its settings and add widgets |
 | Click outside | Dismiss the drawer |
 | Right-click a group | Open Groups settings |
 | Drag a bar icon onto a group | Move it into the drawer |
@@ -78,23 +72,27 @@ Opening another group closes the previous drawer and its child panel. A widget's
 
 ## Settings
 
-Right-click any group to open the shared settings panel. Select a group, change its name, open the searchable icon picker, choose left/center/right placement and hover/click opening, toggle **Show icon border**, then press **Save changes**. Edits preserve hosted widgets and their settings.
+![Group settings for name, icon, position, and drawer behavior](assets/group-settings.png)
 
-**Add group** creates an empty drawer ready for icons. **Remove group** returns its widgets to the same bar section, preserving their settings. The settings shortcut is kept separate from the editable groups.
+Right-click a group to edit that group in the shared settings panel. Everything needed to organize groups is available here:
 
-An optional dedicated settings icon uses this bar entry:
+- **Group:** edit the name, search for an icon, choose left/center/right placement and hover/click opening, toggle the icon border, and set the drawer animation duration. Zero means instant. Press **Save changes** to apply.
+- **Widgets:** add installed widgets, move widgets here from another group or bar section, move them up or down, or return them to the bar. These changes save immediately and preserve widget settings.
+- **Add group:** create another empty group with its own identity.
+- **Remove group:** return the group's widgets to its bar section. Removing the last group leaves a settings button on the bar so you can create groups again.
+- **Settings button on bar:** show or hide a dedicated settings shortcut. It stays visible while there are no groups.
 
-```json
-{"id": "kristofferr.groups", "groupId": "settings", "role": "manager", "label": "Groups settings"}
-```
+Groups can also be dragged along the bar. Escape, Done, or clicking outside closes settings. Use Groups' own settings panel for its individual drawers.
 
-Open the same panel from the terminal:
+![Reorder widgets in a group or return them to the bar](assets/group-widgets.png)
+
+### Optional terminal controls
+
+The UI handles setup and organization; these commands are available for shortcuts and automation. Open settings with:
 
 ```sh
 omarchy-shell shell summon kristofferr.groups
 ```
-
-Escape, Done, or clicking outside closes settings. Avoid the stock per-widget settings editor for multiple instances: it looks up widgets by plugin ID and cannot reliably distinguish individual groups.
 
 Groups also expose independent IPC controls:
 
@@ -108,7 +106,7 @@ omarchy-shell kristofferr.groups.devices eject omarchy.network
 omarchy-shell kristofferr.groups.devices reorder 0 2
 ```
 
-Replace `devices` with your group ID. The `eject` command places the widget beside its group; dragging lets you choose the position.
+Replace `devices` with the group ID reported by `omarchy-shell kristofferr.groups.settings-panel status`. The `eject` command places the widget beside its group; dragging lets you choose the position.
 
 ## Development
 
@@ -127,10 +125,10 @@ Groups runs inside Omarchy Shell with your user's permissions. Moving widgets up
 
 ## Troubleshooting
 
-- **Empty drawer:** drag an icon onto the group. An empty group has no drawer content to display.
+- **Empty drawer:** click it, then choose **Widgets → Add widgets**, or drag an icon onto the group.
 - **Widget missing:** verify the plugin is installed and enabled. Some plugins hide their icon while idle or when hardware is absent.
 - **Changes do not appear:** run `omarchy plugin validate .` in the checkout. After replacing plugin code manually, restart the shell with `omarchy restart shell` to clear cached hosted components.
-- **Several groups behave unexpectedly:** check that every `groupId` is unique. Config edits refuse ambiguous group identities.
+- **Several groups behave unexpectedly:** reopen Groups settings. Missing or duplicate group identities are repaired automatically, preserving names and contents.
 
 ## Credits
 

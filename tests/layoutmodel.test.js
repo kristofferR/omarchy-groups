@@ -494,3 +494,65 @@ console.log('exact bar placement and group transfer passed')
   assert.equal(Layout.removeGroup(config, NOOK, 'settings', []), false)
 }
 console.log('group settings preserve widgets, settings, and stable identities')
+
+// Fresh and duplicated stock-bar entries acquire identities without changing
+// existing named groups or their settings. Re-running is a no-op.
+{
+  const config = makeConfig()
+  config.bar.layout.left.push({id: NOOK, groupId: 'mine', label: 'Personal', items: [{id: 'custom', exec: 'example'}]})
+  config.bar.layout.center.push({id: NOOK, groupId: 'mine'}, NOOK, {id: NOOK, groupId: 'group-1'})
+  const personal = JSON.stringify(config.bar.layout.left[1])
+  assert(Layout.ensureGroupIds(config, NOOK))
+  const groups = Layout.groupRows(config, NOOK)
+  assert.equal(new Set(groups.map(group => group.id)).size, groups.length)
+  assert(groups.every(group => group.id))
+  assert.equal(JSON.stringify(config.bar.layout.left[1]), personal)
+  assert.equal(Layout.ensureGroupIds(config, NOOK), false)
+}
+
+// Setup, widget selection, and removal require no hand-authored config fields.
+{
+  const config = {bar: {layout: {left: [{id: 'w.clock', format: 'short'}, {id: 'w.clock', format: 'long'}], center: [], right: []}}, plugins: [{id: 'w.service', tokenSetting: 'preserved'}], disabledPlugins: ['w.new']}
+  const catalog = [{id: 'w.clock', name: 'Clock', kinds: ['bar-widget']}, {id: 'w.new', name: 'New widget', kinds: ['bar-widget']}, {id: 'w.service', name: 'Service', kinds: ['service']}, {id: NOOK, kinds: ['bar-widget', 'overlay']}]
+  const first = Layout.addGroup(config, NOOK, 'right')
+  const second = Layout.addGroup(config, NOOK, 'left')
+  let choices = Layout.widgetChoices(config, NOOK, catalog, first)
+  assert(!choices.some(c => c.id === NOOK || c.id === 'w.service'))
+  const longClock = choices.find(c => c.id === 'w.clock' && c.location.index === 1)
+  assert(Layout.placeWidget(config, NOOK, first, longClock, true))
+  same(config.bar.layout.left[0], {id: 'w.clock', format: 'short'})
+  same(Layout.findDrawerEntry(config.bar.layout, NOOK, first).entry.items, [{id: 'w.clock', format: 'long'}])
+  const before = JSON.stringify(config)
+  assert.equal(Layout.placeWidget(config, NOOK, second, longClock, true), false, 'stale location must not move another entry')
+  assert.equal(JSON.stringify(config), before)
+  choices = Layout.widgetChoices(config, NOOK, catalog, first)
+  assert(Layout.placeWidget(config, NOOK, first, choices.find(c => c.id === 'w.new'), true))
+  assert(!config.disabledPlugins.includes('w.new'))
+  assert(config.plugins.some(p => p.id === 'w.new'))
+  choices = Layout.widgetChoices(config, NOOK, catalog, second)
+  assert(Layout.placeWidget(config, NOOK, second, choices.find(c => c.id === 'w.clock' && c.origin === 'New group'), true))
+  same(Layout.findDrawerEntry(config.bar.layout, NOOK, second).entry.items, [{id: 'w.clock', format: 'long'}])
+  assert(Layout.removeGroup(config, NOOK, first, ['w.new']))
+  assert(!Layout.hasSettingsShortcut(config, NOOK))
+  assert(Layout.removeGroup(config, NOOK, second, ['w.clock']))
+  assert(Layout.hasSettingsShortcut(config, NOOK), 'last removal leaves a visible settings shortcut')
+  assert.equal(Layout.setSettingsShortcut(config, NOOK, false), false, 'cannot remove only way back')
+  assert(config.bar.layout.left.some(e => e.id === 'w.clock' && e.format === 'long'))
+  assert(config.bar.layout.right.some(e => e.id === 'w.new'))
+  same(config.plugins.find(p => p.id === 'w.service'), {id: 'w.service', tokenSetting: 'preserved'})
+  Layout.addGroup(config, NOOK, 'center')
+  assert(Layout.setSettingsShortcut(config, NOOK, false))
+  assert(!Layout.hasSettingsShortcut(config, NOOK))
+}
+console.log('fresh setup, automatic identities, widget selection and last-group recovery passed')
+
+// Reading host-owned sections must not depend on JavaScript Array methods.
+{
+  const entry = {id: NOOK, groupId: "existing"}
+  const config = {bar: {layout: {left: {0: entry, length: 1}, right: {0: NOOK, length: 1}}}}
+  assert.equal(Layout.needsGroupIds(config, NOOK), true)
+  config.bar.layout.right[0] = {id: NOOK, groupId: "other"}
+  assert.equal(Layout.needsGroupIds(config, NOOK), false)
+  config.bar.layout.right[0].groupId = "existing"
+  assert.equal(Layout.needsGroupIds(config, NOOK), true)
+}

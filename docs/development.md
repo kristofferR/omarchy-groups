@@ -20,7 +20,7 @@ Example separator: `{"id":"io.github.rizmi.divider","style":"line","margin":5}`.
 
 `tests/all.sh` runs the pure layout tests, Qt 6 lint, manifest validation and a
 Quickshell harness. The harness exercises separate instance config writes,
-settings retention, open/close isolation and sibling closing. Pure tests also
+settings retention, open/close isolation and sibling closing. The settings harness also drives creation, naming, widget selection/reordering, return to bar, and last-group recovery through the real QML controls. It tests both the direct shell host and the scoped host, using a temporary settings file for disk writes. Its windows stay unmapped and the user configuration is never edited. Pure tests also
 cover absent/duplicate IDs and every group-scoped mutation.
 
 Optional real-pointer drag tests require `tests/tools/vptr/build.sh` and
@@ -45,3 +45,12 @@ Top-bar behavior is the supported and verified configuration here. Some widgets
 hide themselves when idle or when hardware is absent; their slots are still
 loaded. Widgets retain their own tooltip and status behavior. The group trigger
 does not aggregate every plugin's urgency state.
+
+On stock bars that still rebuild array-backed widget lists, Groups installs a
+small runtime adapter that preserves native widgets during layout edits. It
+changes only those lists in memory, requires no configuration or system-file
+edits, and skips bars with the native fix (omacom/omarchy#10931). The adapter
+belongs to each native list so removing or reloading Groups does not break the
+bar. A shell restart clears it; loading Groups installs it again where needed.
+The compatibility harness checks delegate identity, repeated group IDs, nested
+settings, reordering, empty sections, orientation changes, and native-fix bypass.
