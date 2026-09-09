@@ -4,10 +4,12 @@ Organize your Omarchy bar into independent icon groups. Drawers open below the b
 
 <img src="preview.png" alt="Omarchy menu bar with Sound &amp; media hovered, revealing its widgets below the bar" width="384" height="216">
 
+[Watch real hover and drag-and-drop in action](https://github.com/kristofferR/omarchy-groups/releases/download/v1.0.0/omarchy-groups.gif).
+
 ## Highlights
 
 - **Independent groups.** Give each drawer a name, icon, and stable identity. Place groups on the left, center, or right.
-- **A steady bar.** Drawers open below the bar without pushing other icons around.
+- **A steady bar.** Drawers open below the bar without pushing other icons around. Moving widgets preserves unrelated widgets and their state, including on stock Omarchy.
 - **Drag and drop.** Move widgets between the bar and groups, reorder inside a drawer, or transfer directly between groups. Widget settings stay with the icon.
 - **Native interactions.** Hosted plugins keep their hover tooltips, right-click actions, scrolling, and popup panels.
 - **Hover or click.** Hover opens a drawer; click pins it. Click again or outside to dismiss.
@@ -18,7 +20,7 @@ Organize your Omarchy bar into independent icon groups. Drawers open below the b
 - Omarchy Quattro with the native shell plugin system
 - The standard Omarchy bar
 
-The underlying Quickshell and Hyprland support ships with Omarchy. The top bar is the supported and verified configuration.
+The underlying Quickshell and Hyprland support ships with Omarchy. No additional packages, background services, or shell patches are required. The top bar is the supported and verified configuration.
 
 ## Install
 
