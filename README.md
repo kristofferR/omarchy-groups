@@ -4,7 +4,7 @@ Organize your Omarchy bar into independent icon groups. Drawers open below the b
 
 <img src="preview.png" alt="Omarchy menu bar with Sound &amp; media hovered, revealing its widgets below the bar" width="384" height="216">
 
-[Watch real hover and drag-and-drop in action](https://github.com/kristofferR/omarchy-groups/releases/download/v1.0.0/omarchy-groups.gif).
+<img src="https://github.com/kristofferR/omarchy-groups/releases/download/v1.0.0/omarchy-groups.gif" alt="Groups drawers opening on hover and widgets being dragged between the bar and groups" width="384">
 
 ## Highlights
 
