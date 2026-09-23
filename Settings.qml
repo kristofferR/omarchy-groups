@@ -109,7 +109,7 @@ Item {
   function addWidget(choice) {
     var ok = mutate(function(config) { return Layout.placeWidget(config, pluginId, selectedId, choice, widgetOnly(choice.id)) })
     message = ok ? choice.name + " added" : "The widget list changed. Try again."
-    if (ok) { choosingWidget = false; editingWidgets = true; content.forceActiveFocus() }
+    if (ok) { choosingWidget = false; editingWidgets = true; root.focusContent() }
   }
   function returnWidget(choice) {
     var ok = mutate(function(config) { return Layout.placeWidget(config, pluginId, null, choice, widgetOnly(choice.id)) })
@@ -148,7 +148,10 @@ Item {
     } catch (error) {}
     opened = true
     selectGroup(groups.find(function(group) { return group.id === requestedId }) || groups[0])
-    Qt.callLater(function() { content.forceActiveFocus() })
+    Qt.callLater(function() { root.focusContent() })
+  }
+  function focusContent() {
+    if (typeof content !== "undefined" && content) content.forceActiveFocus()
   }
   function close() { opened = false }
   function toggle() { if (opened) close(); else open("") }
@@ -226,7 +229,7 @@ Item {
     onClicked: {
       root.chosenIcon = iconName
       root.choosingIcon = false
-      content.forceActiveFocus()
+      root.focusContent()
     }
     Image {
       anchors.centerIn: parent
@@ -458,11 +461,11 @@ Item {
         anchors.margins: Style.space(24)
         spacing: Style.space(16)
         visible: root.choosingWidget
-        Keys.onEscapePressed: function(event) { root.choosingWidget = false; content.forceActiveFocus(); event.accepted = true }
+        Keys.onEscapePressed: function(event) { root.choosingWidget = false; root.focusContent(); event.accepted = true }
         Row {
           width: parent.width
           spacing: Style.space(16)
-          Button { text: "Back"; bordered: true; focusable: true; onClicked: { root.choosingWidget = false; content.forceActiveFocus() } }
+          Button { text: "Back"; bordered: true; focusable: true; onClicked: { root.choosingWidget = false; root.focusContent() } }
           Label { anchors.verticalCenter: parent.verticalCenter; text: "Add widgets"; font.pixelSize: Style.font.title; font.bold: true }
         }
         Label { width: parent.width; text: "Choose an installed widget or move one from your bar or another group."; wrapMode: Text.WordWrap; opacity: 0.65 }
@@ -507,11 +510,11 @@ Item {
         anchors.margins: Style.space(24)
         spacing: Style.space(16)
         visible: root.choosingIcon
-        Keys.onEscapePressed: function(event) { root.choosingIcon = false; content.forceActiveFocus(); event.accepted = true }
+        Keys.onEscapePressed: function(event) { root.choosingIcon = false; root.focusContent(); event.accepted = true }
         Row {
           width: parent.width
           spacing: Style.space(16)
-          Button { text: "Back"; bordered: true; focusable: true; onClicked: { root.choosingIcon = false; content.forceActiveFocus() } }
+          Button { text: "Back"; bordered: true; focusable: true; onClicked: { root.choosingIcon = false; root.focusContent() } }
           Label { anchors.verticalCenter: parent.verticalCenter; text: "Choose an icon"; font.pixelSize: Style.font.title; font.bold: true }
         }
         TextField {

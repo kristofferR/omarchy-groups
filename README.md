@@ -129,6 +129,7 @@ Groups runs inside Omarchy Shell with your user's permissions. Moving widgets up
 - **Widget missing:** verify the plugin is installed and enabled. Some plugins hide their icon while idle or when hardware is absent.
 - **Changes do not appear:** run `omarchy plugin validate .` in the checkout. After replacing plugin code manually, restart the shell with `omarchy restart shell` to clear cached hosted components.
 - **Several groups behave unexpectedly:** reopen Groups settings. Missing or duplicate group identities are repaired automatically, preserving names and contents.
+- **Groups disappeared after removing a group:** older versions could leave a stale plugin marker without a bar entry. Run `omarchy plugin disable kristofferr.groups`, then `omarchy plugin enable kristofferr.groups` to put it back on the bar.
 
 ## Credits
 
