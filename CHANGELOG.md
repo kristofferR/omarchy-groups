@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.1.1
+
+- Keep icon selection and settings navigation working without a focus error.
+- Allow Groups to return to the bar after removing a group.
+- Reorder the intended group when several groups share the bar, and leave the layout unchanged when a drag is canceled.
+
 ## 1.1.0
 
 - Reduce work during drawer updates and hovers, and load picker models only while settings are open.
