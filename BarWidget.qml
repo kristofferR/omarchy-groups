@@ -411,7 +411,7 @@ BarWidget {
   // here would only park the entry beside the chevron.
 
   readonly property bool dragActive: !isManager && hostBar && hostBar.barDragSource !== null
-    && hostBar.barDragSource !== ownSlot && !anyGroupDragging
+    && hostBar.barDragSource.moduleName !== moduleName && !anyGroupDragging
   // Without this both monitors' drawers would light up.
   readonly property bool dragInThisWindow: dragActive && hostBar.barDragWindow
     && barWindow === hostBar.barDragWindow
@@ -466,6 +466,54 @@ BarWidget {
     return id
   }
 
+  property var savedBarDropSlot: null
+  property bool savedBarDropAfter: false
+
+  // The native bar clears its drag source on both release and cancellation.
+  // Listen to its pointer instead so only a real release commits our reorder.
+  readonly property var barDragPointer: {
+    var children = ownSlot ? ownSlot.children : []
+    for (var i = 0; i < children.length; i++) {
+      if (children[i] instanceof MouseArea && "dragging" in children[i]) return children[i]
+    }
+    return null
+  }
+
+  function clearBarDrop() {
+    savedBarDropSlot = null
+    savedBarDropAfter = false
+  }
+
+  Connections {
+    target: root.barDragPointer
+    function onPressed() { root.clearBarDrop() }
+    function onCanceled() { root.clearBarDrop() }
+    function onReleased() {
+      var slot = root.savedBarDropSlot
+      var after = root.savedBarDropAfter
+      root.clearBarDrop()
+      if (slot) root.moveGroupToBarSlot(slot, after)
+    }
+  }
+
+  function moveGroupToBarSlot(destSlot, destAfter) {
+    if (!destSlot || !destSlot.region) return
+    var toSection = destSlot.region
+    var toIndex = -1
+    if (destSlot.entry && destSlot.entry.groupId) {
+      var layout = shellConfig && shellConfig.bar ? shellConfig.bar.layout : null
+      var found = Layout.findDrawerEntry(layout, root.moduleName, destSlot.entry.groupId)
+      if (found) toIndex = found.index
+    } else {
+      toIndex = slotLayoutIndex(destSlot)
+    }
+    if (toIndex < 0) return
+    toIndex = toIndex + (destAfter ? 1 : 0)
+    mutate(function(config) {
+      Layout.moveGroupOnBar(config, root.moduleName, root.groupId, toSection, toIndex)
+    })
+  }
+
   Connections {
     target: root.hostBar
 
@@ -475,12 +523,31 @@ BarWidget {
     // target rather than the pointer because Bar.qml sets
     // barDragSceneX first and the target a few lines later.
     function onBarDragTargetChanged() {
+      if (root.hostBar && root.barDragPointer && root.hostBar.barDragSource === root.ownSlot) {
+        if (root.hostBar.barDragTarget === null) return
+        var scenePt = Qt.point(root.hostBar.barDragSceneX, root.hostBar.barDragSceneY)
+        var drop = root.hostBar.moduleDropAtScene(scenePt, root.ownSlot)
+        if (drop && drop.slot) {
+          root.savedBarDropSlot = drop.slot
+          root.savedBarDropAfter = drop.after
+        }
+        root.hostBar.barDragTarget = null
+        return
+      }
       if (!root.dropHovered || !root.hostBar || root.hostBar.barDragTarget === null) return
       root.armedIndex = root.dropOnCard
         ? root.insertionIndexAt(root.vertical ? root.hostBar.barDragSceneY : root.hostBar.barDragSceneX)
         : -1
       root.caretIndex = root.armedIndex
       root.hostBar.barDragTarget = null            // re-enters, and returns at the null check
+    }
+
+    function onBarDragTargetGeometryChanged() {
+      if (root.hostBar && root.hostBar.barDragSource === root.ownSlot) {
+        if (root.hostBar.barDragTargetGeometry === null) {
+          root.clearBarDrop()
+        }
+      }
     }
 
     // Release and cancel look identical here, so an abandoned drag lands.

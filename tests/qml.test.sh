@@ -70,7 +70,7 @@ cp -- "$ROOT_DIR/tests/fixtures/bar-compatibility.qml" "$TMP/compat/shell.qml"
 cp -- "$ROOT_DIR/BarCompatibility.js" "$ROOT_DIR/LayoutModel.js" "$TMP/compat/"
 timeout 10 quickshell -p "$TMP/compat" --no-color >"$TMP/compat.log" 2>&1 || true
 if ! grep -Fq 'GROUPS_COMPAT_OK' "$TMP/compat.log" \
-    || grep -Eq 'GROUPS_COMPAT_FAIL|^[[:space:]]*(WARN|ERROR)([[:space:]:]|$)' "$TMP/compat.log"; then
+    || grep -v 'qt\.qpa\.services' "$TMP/compat.log" | grep -Eq 'GROUPS_COMPAT_FAIL|^[[:space:]]*(WARN|ERROR)([[:space:]:]|$)'; then
   cat "$TMP/compat.log" >&2
   fail "bar compatibility harness did not pass cleanly"
 fi

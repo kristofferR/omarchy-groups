@@ -623,3 +623,87 @@ for (const destination of [null, 'target']) {
   config.bar.layout.right[0].groupId = "existing"
   assert.equal(Layout.needsGroupIds(config, NOOK), true)
 }
+
+// moveGroupOnBar
+{
+  const makeMultiGroupConfig = () => ({
+    bar: {
+      layout: {
+        left: [
+          { id: "omarchy.workspaces" },
+          { id: NOOK, groupId: "g1", label: "Group 1", items: [] },
+          { id: "w.two" },
+          { id: NOOK, groupId: "g2", label: "Group 2", items: [] },
+          { id: "w.three" },
+        ],
+        center: [],
+        right: [
+          { id: NOOK, groupId: "g3", label: "Group 3", items: [] },
+          { id: "omarchy.clock" },
+        ],
+      },
+    },
+    plugins: [],
+  })
+
+  // Moving group forward in same section
+  {
+    const config = makeMultiGroupConfig()
+    assert.equal(Layout.moveGroupOnBar(config, NOOK, "g1", "left", 4), true)
+    same(config.bar.layout.left.map(e => e.groupId || e.id),
+      ["omarchy.workspaces", "w.two", "g2", "g1", "w.three"])
+  }
+
+  // Moving group backward in same section
+  {
+    const config = makeMultiGroupConfig()
+    assert.equal(Layout.moveGroupOnBar(config, NOOK, "g2", "left", 0), true)
+    same(config.bar.layout.left.map(e => e.groupId || e.id),
+      ["g2", "omarchy.workspaces", "g1", "w.two", "w.three"])
+  }
+
+  // Moving group across sections (e.g. right to left)
+  {
+    const config = makeMultiGroupConfig()
+    assert.equal(Layout.moveGroupOnBar(config, NOOK, "g3", "left", 1), true)
+    same(config.bar.layout.right.map(e => e.groupId || e.id), ["omarchy.clock"])
+    same(config.bar.layout.left.map(e => e.groupId || e.id),
+      ["omarchy.workspaces", "g3", "g1", "w.two", "g2", "w.three"])
+  }
+
+  // Reordering between multiple groups (e.g. group-2 moved before or after group-1)
+  {
+    const config = makeMultiGroupConfig()
+    // Move g2 before g1
+    assert.equal(Layout.moveGroupOnBar(config, NOOK, "g2", "left", 1), true)
+    same(config.bar.layout.left.map(e => e.groupId || e.id),
+      ["omarchy.workspaces", "g2", "g1", "w.two", "w.three"])
+
+    // Move g2 after g1
+    assert.equal(Layout.moveGroupOnBar(config, NOOK, "g2", "left", 3), true)
+    same(config.bar.layout.left.map(e => e.groupId || e.id),
+      ["omarchy.workspaces", "g1", "g2", "w.two", "w.three"])
+  }
+
+  // Dropping on itself returns false
+  {
+    const config = makeMultiGroupConfig()
+    const before = JSON.stringify(config)
+    // Dropping before itself (index 1) or after itself (index 2) is a no-op
+    assert.equal(Layout.moveGroupOnBar(config, NOOK, "g1", "left", 1), false)
+    assert.equal(JSON.stringify(config), before)
+    assert.equal(Layout.moveGroupOnBar(config, NOOK, "g1", "left", 2), false)
+    assert.equal(JSON.stringify(config), before)
+  }
+
+  // Non-existent groupId returns false
+  {
+    const config = makeMultiGroupConfig()
+    const before = JSON.stringify(config)
+    assert.equal(Layout.moveGroupOnBar(config, NOOK, "non-existent", "left", 0), false)
+    assert.equal(Layout.moveGroupOnBar(config, "other.module", "g1", "left", 0), false)
+    assert.equal(Layout.moveGroupOnBar(null, NOOK, "g1", "left", 0), false)
+    assert.equal(Layout.moveGroupOnBar(config, NOOK, "g1", "invalid-section", 0), false)
+    assert.equal(JSON.stringify(config), before)
+  }
+}

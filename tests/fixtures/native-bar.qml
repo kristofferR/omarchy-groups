@@ -60,6 +60,35 @@ ShellRoot {
 
   function group(id) { return bar.moduleWidgets(groupId).find(widget => widget.groupId === id) }
   function check(condition, message) { if (!condition) throw new Error(message) }
+  function groupOrder() { return shell.shellConfig.bar.layout.right.map(entry => entry.groupId).join(",") }
+
+  function dragGroup(from, to, after, cancel, outside) {
+    var pointer = from.ownSlot.children.find(child => child instanceof MouseArea && "dragging" in child)
+    check(!!pointer, "native group drag pointer not found")
+    bar.clearBarDrag()
+    pointer.dragging = true
+    bar.barDragWindow = from.barWindow
+    bar.barDragSource = from.ownSlot
+    var point = to.ownSlot.mapToItem(null, to.width * (after ? 0.75 : 0.25), to.height / 2)
+    bar.barDragSceneX = point.x
+    bar.barDragSceneY = point.y
+    var drop = bar.moduleDropAtScene(point, from.ownSlot)
+    check(drop && drop.slot === to.ownSlot && drop.after === after, "wrong native drop target")
+    bar.barDragTarget = drop.slot
+    bar.barDragAfter = drop.after
+    bar.barDragTargetGeometry = bar.dropMarkerRect(drop.slot, drop.after)
+    if (outside) {
+      bar.barDragSceneY = from.barWindow.height + 500
+      bar.barDragTarget = null
+      bar.barDragTargetGeometry = null
+    }
+    // Exercise the native MouseArea's handlers, including clearBarDrag's signal
+    // order. A group intercepts the target, so release does not consume a mouse.
+    check(bar.barDragTarget === null, "group did not intercept the native reorder")
+    if (cancel) pointer.canceled()
+    else pointer.released(null)
+  }
+
   function finish(error) {
     console.log(error ? "GROUPS_NATIVE_FAIL stage " + stage + ": " + error : "GROUPS_NATIVE_OK")
     ticker.stop()
@@ -160,10 +189,30 @@ ShellRoot {
               check(source.caretIndex > previous, "scrolling left the stationary drag insertion point stale")
               source.cancelChildDrag()
               source.close()
-              finish("")
+              root.stage++
+              ticker.start()
             } catch (error) { finish(error) }
           })
           ticker.stop()
+        } else if (root.stage === 9) {
+          // The destination connected first; it must not swallow this drop.
+          dragGroup(target, source, false, false, false)
+          root.stage++
+        } else if (root.stage === 10) {
+          check(groupOrder() === "target,source", "destination-first handlers lost the group drop")
+          dragGroup(source, target, false, false, false)
+          root.stage++
+        } else if (root.stage === 11) {
+          check(groupOrder() === "source,target", "source-first handlers lost the group drop")
+          dragGroup(target, source, false, true, false)
+          check(groupOrder() === "source,target", "canceled drag committed a group reorder")
+          dragGroup(target, source, false, false, true)
+          check(groupOrder() === "source,target", "drop outside the bar used a stale destination")
+          dragGroup(source, target, true, false, false)
+          root.stage++
+        } else if (root.stage === 12) {
+          check(groupOrder() === "target,source", "release after cancellation missed the after-target drop")
+          finish("")
         }
       } catch (error) { finish(error) }
     }
