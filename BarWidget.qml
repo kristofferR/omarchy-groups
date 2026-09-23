@@ -466,6 +466,27 @@ BarWidget {
     return id
   }
 
+  property var savedBarDropSlot: null
+  property bool savedBarDropAfter: false
+
+  function moveGroupToBarSlot(destSlot, destAfter) {
+    if (!destSlot || !destSlot.region) return
+    var toSection = destSlot.region
+    var toIndex = -1
+    if (destSlot.entry && destSlot.entry.groupId) {
+      var layout = shellConfig && shellConfig.bar ? shellConfig.bar.layout : null
+      var found = Layout.findDrawerEntry(layout, root.moduleName, destSlot.entry.groupId)
+      if (found) toIndex = found.index
+    } else {
+      toIndex = slotLayoutIndex(destSlot)
+    }
+    if (toIndex < 0) return
+    toIndex = toIndex + (destAfter ? 1 : 0)
+    mutate(function(config) {
+      Layout.moveGroupOnBar(config, root.moduleName, root.groupId, toSection, toIndex)
+    })
+  }
+
   Connections {
     target: root.hostBar
 
@@ -475,12 +496,32 @@ BarWidget {
     // target rather than the pointer because Bar.qml sets
     // barDragSceneX first and the target a few lines later.
     function onBarDragTargetChanged() {
+      if (root.hostBar && root.hostBar.barDragSource === root.ownSlot) {
+        if (root.hostBar.barDragTarget === null) return
+        var scenePt = Qt.point(root.hostBar.barDragSceneX, root.hostBar.barDragSceneY)
+        var drop = root.hostBar.moduleDropAtScene(scenePt, root.ownSlot)
+        if (drop && drop.slot) {
+          root.savedBarDropSlot = drop.slot
+          root.savedBarDropAfter = drop.after
+        }
+        root.hostBar.barDragTarget = null
+        return
+      }
       if (!root.dropHovered || !root.hostBar || root.hostBar.barDragTarget === null) return
       root.armedIndex = root.dropOnCard
         ? root.insertionIndexAt(root.vertical ? root.hostBar.barDragSceneY : root.hostBar.barDragSceneX)
         : -1
       root.caretIndex = root.armedIndex
       root.hostBar.barDragTarget = null            // re-enters, and returns at the null check
+    }
+
+    function onBarDragTargetGeometryChanged() {
+      if (root.hostBar && root.hostBar.barDragSource === root.ownSlot) {
+        if (root.hostBar.barDragTargetGeometry === null) {
+          root.savedBarDropSlot = null
+          root.savedBarDropAfter = false
+        }
+      }
     }
 
     // Release and cancel look identical here, so an abandoned drag lands.
@@ -494,6 +535,14 @@ BarWidget {
       if (choice) root.mutate(function(config) {
         Layout.placeWidget(config, root.moduleName, root.groupId, choice, false, index)
       })
+
+      if (root.savedBarDropSlot) {
+        var dropSlot = root.savedBarDropSlot
+        var dropAfter = root.savedBarDropAfter
+        root.savedBarDropSlot = null
+        root.savedBarDropAfter = false
+        root.moveGroupToBarSlot(dropSlot, dropAfter)
+      }
     }
   }
 

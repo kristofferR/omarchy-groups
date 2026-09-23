@@ -395,6 +395,31 @@ function removeGroup(config, moduleName, groupId, widgetOnlyIds) {
   return true
 }
 
+function moveGroupOnBar(config, moduleName, groupId, toSection, toIndex) {
+  var layout = config && config.bar ? config.bar.layout : null
+  if (!layout || SECTIONS.indexOf(toSection) < 0) return false
+  var found = findDrawerEntry(layout, moduleName, groupId)
+  if (!found) return false
+  var fromSection = found.section
+  var fromIndex = found.index
+  var fromEntries = layout[fromSection]
+  if (!Array.isArray(layout[toSection])) layout[toSection] = []
+  var toEntries = layout[toSection]
+
+  var entry = fromEntries.splice(fromIndex, 1)[0]
+  var destIndex = Number.isInteger(toIndex) ? toIndex : toEntries.length
+  if (fromSection === toSection && fromIndex < destIndex) destIndex -= 1
+  destIndex = Math.max(0, Math.min(destIndex, toEntries.length))
+
+  if (fromSection === toSection && fromIndex === destIndex) {
+    fromEntries.splice(fromIndex, 0, entry)
+    return false
+  }
+
+  toEntries.splice(destIndex, 0, entry)
+  return true
+}
+
 
 function groupRows(config, moduleName) {
   var layout = config && config.bar ? config.bar.layout : null
