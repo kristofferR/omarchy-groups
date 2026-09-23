@@ -411,7 +411,7 @@ BarWidget {
   // here would only park the entry beside the chevron.
 
   readonly property bool dragActive: !isManager && hostBar && hostBar.barDragSource !== null
-    && hostBar.barDragSource !== ownSlot && !anyGroupDragging
+    && hostBar.barDragSource.moduleName !== moduleName && !anyGroupDragging
   // Without this both monitors' drawers would light up.
   readonly property bool dragInThisWindow: dragActive && hostBar.barDragWindow
     && barWindow === hostBar.barDragWindow
@@ -469,6 +469,33 @@ BarWidget {
   property var savedBarDropSlot: null
   property bool savedBarDropAfter: false
 
+  // The native bar clears its drag source on both release and cancellation.
+  // Listen to its pointer instead so only a real release commits our reorder.
+  readonly property var barDragPointer: {
+    var children = ownSlot ? ownSlot.children : []
+    for (var i = 0; i < children.length; i++) {
+      if (children[i] instanceof MouseArea && "dragging" in children[i]) return children[i]
+    }
+    return null
+  }
+
+  function clearBarDrop() {
+    savedBarDropSlot = null
+    savedBarDropAfter = false
+  }
+
+  Connections {
+    target: root.barDragPointer
+    function onPressed() { root.clearBarDrop() }
+    function onCanceled() { root.clearBarDrop() }
+    function onReleased() {
+      var slot = root.savedBarDropSlot
+      var after = root.savedBarDropAfter
+      root.clearBarDrop()
+      if (slot) root.moveGroupToBarSlot(slot, after)
+    }
+  }
+
   function moveGroupToBarSlot(destSlot, destAfter) {
     if (!destSlot || !destSlot.region) return
     var toSection = destSlot.region
@@ -496,7 +523,7 @@ BarWidget {
     // target rather than the pointer because Bar.qml sets
     // barDragSceneX first and the target a few lines later.
     function onBarDragTargetChanged() {
-      if (root.hostBar && root.hostBar.barDragSource === root.ownSlot) {
+      if (root.hostBar && root.barDragPointer && root.hostBar.barDragSource === root.ownSlot) {
         if (root.hostBar.barDragTarget === null) return
         var scenePt = Qt.point(root.hostBar.barDragSceneX, root.hostBar.barDragSceneY)
         var drop = root.hostBar.moduleDropAtScene(scenePt, root.ownSlot)
@@ -518,8 +545,7 @@ BarWidget {
     function onBarDragTargetGeometryChanged() {
       if (root.hostBar && root.hostBar.barDragSource === root.ownSlot) {
         if (root.hostBar.barDragTargetGeometry === null) {
-          root.savedBarDropSlot = null
-          root.savedBarDropAfter = false
+          root.clearBarDrop()
         }
       }
     }
@@ -535,14 +561,6 @@ BarWidget {
       if (choice) root.mutate(function(config) {
         Layout.placeWidget(config, root.moduleName, root.groupId, choice, false, index)
       })
-
-      if (root.savedBarDropSlot) {
-        var dropSlot = root.savedBarDropSlot
-        var dropAfter = root.savedBarDropAfter
-        root.savedBarDropSlot = null
-        root.savedBarDropAfter = false
-        root.moveGroupToBarSlot(dropSlot, dropAfter)
-      }
     }
   }
 
