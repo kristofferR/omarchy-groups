@@ -71,11 +71,18 @@ function syncEntries(model, entries) {
 // object. BarWidget.qml owns the bindings, timers and injection; this owns the
 // data. Nothing here reads QML state, so node can run it.
 //
-// A config is `{ bar: { layout: { left, center, right } }, plugins: [] }`.
+// A config is `{ bar: { layout: { left, centerBegin, ... } }, plugins: [] }`.
 // Functions that take one mutate it in place, matching mutateShellConfig, which
 // hands out a deep clone and persists whatever comes back.
 
-var SECTIONS = ["left", "center", "right"]
+// The bar's sections in the order they run along it, then the tray's drawer.
+var SECTIONS = ["left", "centerBegin", "center", "centerEnd", "right", "tray"]
+var SECTION_LABELS = {left: "Left", centerBegin: "Center left", center: "Center",
+  centerEnd: "Center right", right: "Right", tray: "Tray"}
+
+function sectionLabel(section) {
+  return SECTION_LABELS[section] || String(section || "")
+}
 
 function isPlainObject(value) {
   return value !== null && typeof value === "object" && !Array.isArray(value)
@@ -88,6 +95,26 @@ function entryIdOf(entry) {
   // Not String(id) straight away: String(undefined) is "undefined", which would
   // give every id-less entry the same phantom id.
   return id === undefined || id === null ? "" : String(id)
+}
+
+// The bar draws a string or an object with an id, and leaves out anything else
+// (Util.normalizeLayoutEntry in the host).
+function isWidgetEntry(entry) {
+  return typeof entry === "string" || (isPlainObject(entry) && !!entry.id)
+}
+
+// The bar counts a section by the widgets it draws. Where the widget at its
+// `index` sits among the section's raw entries: the length for one past the
+// last widget, -1 further out. `list` may be a host-owned Qt list.
+function rawIndex(list, index) {
+  if (!list || list.length === undefined || !Number.isInteger(index) || index < 0) return -1
+  var widgets = 0
+  for (var i = 0; i < list.length; i++) {
+    if (!isWidgetEntry(list[i])) continue
+    if (widgets === index) return i
+    widgets++
+  }
+  return index === widgets ? list.length : -1
 }
 
 // Drops entries the drawer cannot host: no id, or the drawer itself.
@@ -395,32 +422,6 @@ function removeGroup(config, moduleName, groupId, widgetOnlyIds) {
   return true
 }
 
-function moveGroupOnBar(config, moduleName, groupId, toSection, toIndex) {
-  var layout = config && config.bar ? config.bar.layout : null
-  if (!layout || SECTIONS.indexOf(toSection) < 0) return false
-  var found = findDrawerEntry(layout, moduleName, groupId)
-  if (!found) return false
-  var fromSection = found.section
-  var fromIndex = found.index
-  var fromEntries = layout[fromSection]
-  if (!Array.isArray(layout[toSection])) layout[toSection] = []
-  var toEntries = layout[toSection]
-
-  var entry = fromEntries.splice(fromIndex, 1)[0]
-  var destIndex = Number.isInteger(toIndex) ? toIndex : toEntries.length
-  if (fromSection === toSection && fromIndex < destIndex) destIndex -= 1
-  destIndex = Math.max(0, Math.min(destIndex, toEntries.length))
-
-  if (fromSection === toSection && fromIndex === destIndex) {
-    fromEntries.splice(fromIndex, 0, entry)
-    return false
-  }
-
-  toEntries.splice(destIndex, 0, entry)
-  return true
-}
-
-
 function groupRows(config, moduleName) {
   var layout = config && config.bar ? config.bar.layout : null
   var rows = []
@@ -525,7 +526,7 @@ function widgetChoices(config, moduleName, catalog, targetGroupId) {
     placed.push(id)
     if (group && String(group.groupId || "") === targetGroupId) return
     rows.push({id: id, name: entry.label || names[id] || id,
-      origin: group ? (group.label || "Group") : (section.charAt(0).toUpperCase() + section.slice(1) + " bar"),
+      origin: group ? (group.label || "Group") : section === "tray" ? "Tray drawer" : sectionLabel(section) + " bar",
       location: {section: section, index: index, groupId: group ? String(group.groupId || "") : null, itemIndex: itemIndex, snapshot: JSON.stringify(entry)}})
   }
   SECTIONS.forEach(function(section) {
@@ -551,9 +552,10 @@ function placeWidget(config, moduleName, destinationId, choice, widgetOnly, inse
   var destination = destinationId === null ? null : findDrawerEntry(layout, moduleName, destinationId)
   if (destinationId !== null && (!destination || destination.entry.role === "manager")) return false
   if (insertionIndex !== undefined && (!Number.isInteger(insertionIndex) || insertionIndex < -1)) return false
+  // A section the bar draws empty may be missing from the config.
   if (barDestination && (destinationId !== null || SECTIONS.indexOf(barDestination.section) < 0
-      || !Array.isArray(layout[barDestination.section]) || !Number.isInteger(barDestination.index)
-      || barDestination.index < 0 || barDestination.index > layout[barDestination.section].length)) return false
+      || !Number.isInteger(barDestination.index) || barDestination.index < 0
+      || barDestination.index > (layout[barDestination.section] || []).length)) return false
   var source = null, sourceGroup = null, at = -1
   if (choice.location) {
     var loc = choice.location
@@ -590,6 +592,7 @@ function placeWidget(config, moduleName, destinationId, choice, widgetOnly, inse
   } else {
     var section = barDestination ? barDestination.section : choice.location.section
     var index = barDestination ? barDestination.index : choice.location.index + 1
+    if (!Array.isArray(layout[section])) layout[section] = []
     layout[section].splice(index, 0, entry)
     unmarkEnabled(config, choice.id, moduleName)
   }

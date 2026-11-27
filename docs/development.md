@@ -19,7 +19,7 @@ Example separator: `{"id":"io.github.rizmi.divider","style":"line","margin":5}`.
 ## Validation and boundaries
 
 `tests/all.sh` runs the pure layout tests, Qt 6 lint, manifest validation and a
-Quickshell harness. The harness exercises separate instance config writes,
+Quickshell harness against a mock bar. The harness exercises separate instance config writes,
 settings retention, open/close isolation and sibling closing. The settings harness also drives creation, naming, widget selection/reordering, return to bar, and last-group recovery through the real QML controls. It tests both the direct shell host and the scoped host, using a temporary settings file for disk writes. Its windows stay unmapped and the user configuration is never edited. Pure tests also
 cover absent/duplicate IDs and every group-scoped mutation.
 
@@ -29,7 +29,7 @@ restore the live layout, so run them only while the pointer is free.
 
 `uv run --no-project python tests/interactions.test.py` uses a temporary harmless
 widget to check bar-to-group dragging, group-to-group transfer, cursor-following
-drag images, insertion markers, precise bar drop placement, cancellation, and
+drag images, the room the bar opens for a drop, precise bar drop placement, cancellation, and
 native tooltip/right-click behavior. It restores the
 original configuration and pointer. Set `NOOK_GROUP_ID` and
 `NOOK_TARGET_GROUP_ID` to two existing groups (defaults: `windows` and `input`).
@@ -39,21 +39,34 @@ Nook integrates with Omarchy's bar internals rather than a stable hosting API.
 On shells with scoped plugin APIs, Groups resolves the containing bar through a
 first-party widget on the same bar, such as the menu or clock. Keep at least one
 such widget present. Hosted third-party widgets retain their scoped APIs.
-Drags out of drawers use the bar's ghost overlay and target hit testing; Groups
-commits the move because the source entry belongs to a drawer's item list.
 Top-bar behavior is the supported and verified configuration here. Some widgets
 hide themselves when idle or when hardware is absent; their slots are still
 loaded. Widgets retain their own tooltip and status behavior. The group trigger
 does not aggregate every plugin's urgency state.
 
-On stock bars that still rebuild array-backed widget lists, Groups installs a
-small runtime adapter that preserves native widgets during layout edits. It
-changes only those lists in memory, requires no configuration or system-file
-edits, and skips bars with the native fix (omacom/omarchy#10931). The adapter
-belongs to each native list so removing or reloading Groups does not break the
-bar. A shell restart clears it; loading Groups installs it again where needed.
-The compatibility harness checks delegate identity, repeated group IDs, nested
-settings, reordering, empty sections, orientation changes, and native-fix bypass.
+## How dragging uses the bar
+
+Groups needs the bar from Omarchy 4.5 (omacom/omarchy#15517), which shows where
+a drop lands by opening room for the widget, and removes a widget pulled well
+off the bar. Three paths cross it:
+
+- **Bar to group.** The bar tracks the pointer and draws the ghost. Groups reads
+  `barDragSource` and the drag's scene position, and takes the drop when the bar
+  clears its drag. While the pointer is over a group's icon or drawer, Groups
+  sends the bar's room back where the widget came from (`moveDragRoom(null)`)
+  and clears `barDragRemoveArmed`, so the release moves or removes nothing
+  natively. A release also starts the bar's settle glide; Groups ends it with
+  `finishBarSettle()`.
+- **Drawer to bar.** A hosted widget has no slot on the bar, so its cell
+  registers a proxy slot with what the bar reads off a drag source
+  (`widgetKey`, `widgetWidth`, `widgetHeight`). Groups sets up the bar's drag
+  state itself, feeds each pointer position to `moduleDropAtScene` and
+  `moveDragRoom`, and drops the widget where `barDragRoom` is.
+- **A group's own icon** is an ordinary bar widget, and the bar reorders it.
+  Groups only keeps removal disarmed while the group still holds widgets.
+
+All of this is the bar's internals, not a plugin API, so an Omarchy update can
+change it. The mock harness cannot notice; the native test below can.
 
 ## Performance and drag validation
 
@@ -80,9 +93,16 @@ Qt's JavaScript engine, without a display or GPU. A local sample against
 These are microbenchmarks, not desktop frame-rate measurements. Results vary by
 machine and load; they are deliberately not pass/fail tests.
 
-On a **dedicated test compositor**, set `GROUPS_NATIVE_TEST=1` when running
-`./validate`. This additionally maps the installed native bar with harmless
-probe widgets and an in-memory layout. It checks scoped host discovery,
-repeated-widget drag identity, exact insertion, shared plugin enablement,
-dismissal reuse, and stationary-pointer scrolling. Use a 1920×1080 test output.
-The default harnesses remain unmapped and safe to run in the desktop session.
+`tests/native.sh` runs the same fixtures against the installed native bar, with
+harmless probe widgets and an in-memory layout. It drives the bar's own drag
+functions through every path above and checks scoped host discovery,
+repeated-widget drag identity, exact insertion, the bar's room and ghost,
+shared plugin enablement, the removal guard, dismissal reuse, and
+stationary-pointer scrolling. Run it after an Omarchy update that touches the
+bar.
+
+The bar it maps must not land on the desktop, so the script starts a nested
+Hyprland for it: hidden on a special workspace, with its own runtime directory
+and a headless 1920×1080 output. To use another dedicated test compositor,
+set `GROUPS_NATIVE_TEST=1` when running `./validate` inside it. The default
+harnesses remain unmapped and safe to run in the desktop session.

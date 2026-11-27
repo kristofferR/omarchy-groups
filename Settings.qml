@@ -326,7 +326,7 @@ Item {
                       anchors.right: parent.right; anchors.rightMargin: Style.space(10)
                       anchors.verticalCenter: parent.verticalCenter
                       Label { width: parent.width; text: modelData.name; elide: Text.ElideRight }
-                      Label { text: modelData.section + " · " + modelData.count + " icons"; font.pixelSize: Style.font.caption; opacity: 0.6 }
+                      Label { text: Layout.sectionLabel(modelData.section) + " · " + modelData.count + " icons"; font.pixelSize: Style.font.caption; opacity: 0.6 }
                     }
                     activeFocusOnTab: true
                     border.width: activeFocus ? 1 : 0
@@ -404,7 +404,14 @@ Item {
                 Row {
                   width: parent.width
                   spacing: Style.space(12)
-                  Dropdown { id: positionPicker; width: (parent.width - parent.spacing) / 2; label: "Position"; options: ["left", "center", "right"] }
+                  Dropdown {
+                    id: positionPicker
+                    width: (parent.width - parent.spacing) / 2
+                    label: "Position"
+                    // Every section on the bar itself. The tray's drawer is a drawer already.
+                    options: Layout.SECTIONS.filter(function(section) { return section !== "tray" })
+                      .map(function(section) { return {value: section, label: Layout.sectionLabel(section)} })
+                  }
                   Dropdown { id: triggerPicker; width: (parent.width - parent.spacing) / 2; label: "Open on"; options: ["hover", "click"] }
                 }
                 Toggle {

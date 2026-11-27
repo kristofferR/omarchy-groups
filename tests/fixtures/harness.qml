@@ -167,6 +167,9 @@ ShellRoot {
     property var barDragSource: null
     property var barDragWindow: null
     property var barDragTarget: null
+    property var barDragRoom: null
+    property bool barDragRemoveArmed: false
+    property var barSettle: null
     property real barDragSceneX: 0
     property real barDragSceneY: 0
     // Empty peers make every instance the config writer.
