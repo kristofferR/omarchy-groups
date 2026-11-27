@@ -4,6 +4,9 @@ import Quickshell
 import Quickshell.Io
 import Quickshell.Wayland
 import qs.Commons
+// `Color` alone can resolve to QtQuick's own Color type instead of the theme,
+// so the theme is named through this alias, as the stock shell does.
+import qs.Commons as Commons
 import qs.Ui
 import "LayoutModel.js" as Layout
 import "GroupIcons.js" as GroupIcons
@@ -95,8 +98,8 @@ BarWidget {
   // A transparent bar picks barForeground to contrast with the wallpaper, not
   // with this card, so the card stays on the theme and hosted widgets are
   // repainted to match it.
-  readonly property color cardBackground: hostBar ? hostBar.background : Color.background
-  readonly property color hostedForeground: hostBar ? hostBar.themeForeground : Color.foreground
+  readonly property color cardBackground: hostBar ? hostBar.background : Commons.Color.background
+  readonly property color hostedForeground: hostBar ? hostBar.themeForeground : Commons.Color.foreground
 
   // The bar owns the rules for what counts as a custom module, so ask it.
   function customTypeOf(entry) {
@@ -845,8 +848,8 @@ BarWidget {
       id: groupTitleBubble
       implicitWidth: groupTitleLabel.implicitWidth + 20
       implicitHeight: groupTitleLabel.implicitHeight + 14
-      color: Color.tooltip.background
-      borderSpec: Border.surfaceSpec("tooltip", "border", Color.tooltip.border, 1)
+      color: Commons.Color.tooltip.background
+      borderSpec: Border.surfaceSpec("tooltip", "border", Commons.Color.tooltip.border, 1)
       radius: Style.cornerRadius
 
       Text {
@@ -854,7 +857,7 @@ BarWidget {
         anchors.centerIn: parent
         textFormat: Text.PlainText
         text: root.groupLabel + " · " + root.entries.length + " plugins"
-        color: Color.tooltip.text
+        color: Commons.Color.tooltip.text
         font.family: root.hostBar ? root.hostBar.fontFamily : Style.font.family
         font.pixelSize: Style.font.body
       }
@@ -890,7 +893,7 @@ BarWidget {
       z: -1
     }
     active: root.dropHovered || root.expanded
-    activeColor: Color.accent          // `active` defaults to bar.urgent, kept for urgency
+    activeColor: Commons.Color.accent          // `active` defaults to bar.urgent, kept for urgency
     tooltipText: root.isManager ? "Groups settings" : root.entries.length === 0 ? "Add widgets to " + root.groupLabel : root.trigger === "hover" || root.expanded
       ? "" : root.groupLabel + " · " + root.entries.length + " plugins"
     // Tests `latched`, not `expanded`: hovering already makes it expanded, so
@@ -942,15 +945,15 @@ BarWidget {
       id: childTooltipBubble
       implicitWidth: childTooltipLabel.implicitWidth + 20
       implicitHeight: childTooltipLabel.implicitHeight + 14
-      color: Color.tooltip.background
-      borderSpec: Border.surfaceSpec("tooltip", "border", Color.tooltip.border, 1)
+      color: Commons.Color.tooltip.background
+      borderSpec: Border.surfaceSpec("tooltip", "border", Commons.Color.tooltip.border, 1)
       radius: Style.cornerRadius
       Text {
         id: childTooltipLabel
         anchors.centerIn: parent
         textFormat: Text.PlainText
         text: root.hostBar ? root.hostBar.tooltipText : ""
-        color: Color.tooltip.text
+        color: Commons.Color.tooltip.text
         font.family: root.hostBar ? root.hostBar.fontFamily : Style.font.family
         font.pixelSize: Style.font.body
       }
@@ -1115,8 +1118,8 @@ BarWidget {
       BorderSurface {
         anchors.fill: parent
         color: root.cardBackground
-        borderSpec: Border.localOrSurfaceSpec("popups", "border", Color.popups.border,
-          Color.popups.border, Math.max(1, Style.space(2)))
+        borderSpec: Border.localOrSurfaceSpec("popups", "border", Commons.Color.popups.border,
+          Commons.Color.popups.border, Math.max(1, Style.space(2)))
         radius: Style.cornerRadius
       }
 
@@ -1175,7 +1178,7 @@ BarWidget {
 
           visible: opacity > 0
           opacity: root.caretIndex >= 0 && anchorCell ? 0.9 : 0
-          color: Color.accent
+          color: Commons.Color.accent
           radius: Math.min(width, height) / 2
           width: root.vertical ? (anchorCell ? anchorCell.width : 0) : Style.spacing.xs
           height: root.vertical ? Style.spacing.xs : (anchorCell ? anchorCell.height : 0)
@@ -1390,7 +1393,7 @@ BarWidget {
       text: ""
       font.family: cell.host ? cell.host.fontFamily : Style.font.family
       font.pixelSize: Style.font.body
-      color: cell.host ? cell.host.barForeground : Color.foreground
+      color: cell.host ? cell.host.barForeground : Commons.Color.foreground
       opacity: 0.4
     }
 
@@ -1454,7 +1457,7 @@ BarWidget {
 
       visible: opacity > 0
       opacity: cell.childOpen && !cell.dragSource ? 0.9 : 0
-      color: Color.accent
+      color: Commons.Color.accent
       radius: Math.min(width, height) / 2
       width: alongBar ? Math.max(Style.space(10), Math.round(cell.width * 0.55)) : Style.space(2)
       height: alongBar ? Style.space(2) : Math.max(Style.space(10), Math.round(cell.height * 0.55))
