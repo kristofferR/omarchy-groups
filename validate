@@ -1,5 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 root_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
-bash -n "$root_dir/install-local.sh" "$root_dir/validate" "$root_dir/tests/all.sh" "$root_dir/tests/qml.test.sh" "$root_dir/tests/native.sh" "$root_dir/tests/benchmark.sh" "$root_dir/tests/tools/vptr/build.sh"
+# One at a time: bash -n reads only its first path, and takes the rest as arguments.
+for script in install-local.sh validate tests/all.sh tests/qml.test.sh tests/native.sh tests/benchmark.sh tests/tools/vptr/build.sh; do
+  bash -n "$root_dir/$script"
+done
 exec bash "$root_dir/tests/all.sh"

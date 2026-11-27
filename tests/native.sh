@@ -13,13 +13,13 @@ SESSION_DISPLAY=$XDG_RUNTIME_DIR/${WAYLAND_DISPLAY:-wayland-1}
 export HYPRLAND_INSTANCE_SIGNATURE=${HYPRLAND_INSTANCE_SIGNATURE:-$(command ls -t "$XDG_RUNTIME_DIR/hypr" | head -n1)}
 
 RUN=$(mktemp -d /tmp/groups-native.XXXXXX)
-PID=
+# The session starts the compositor, so there is no pid to keep. Its config
+# path is unique to this run, and known before it starts.
+NESTED="Hyprland -c $RUN/hyprland.lua"
 cleanup() {
-  if [[ -n $PID ]]; then
-    kill "$PID" 2>/dev/null || true
-    # Its runtime directory goes once it has stopped writing there.
-    for _ in $(seq 30); do kill -0 "$PID" 2>/dev/null || break; sleep 0.1; done
-  fi
+  pkill -f -- "$NESTED" || true
+  # Its runtime directory goes once it has stopped writing there.
+  for _ in $(seq 30); do pgrep -f -- "$NESTED" >/dev/null || break; sleep 0.1; done
   rm -rf -- "$RUN"
 }
 trap cleanup EXIT
@@ -37,7 +37,6 @@ for _ in $(seq 50); do
   sleep 0.2
 done
 [[ -n $LOCK ]] || { echo "native.sh: the nested compositor did not start" >&2; exit 1; }
-PID=$(sed -n 1p "$LOCK")
 nested() {
   env XDG_RUNTIME_DIR="$RUN" WAYLAND_DISPLAY="$(sed -n 2p "$LOCK")" \
     HYPRLAND_INSTANCE_SIGNATURE="$(basename -- "${LOCK%/*}")" "$@"

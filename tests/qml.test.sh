@@ -47,6 +47,8 @@ fi
 # needs a Wayland backend, so this leg needs a running session; the window it
 # creates starts invisible and never maps.
 if [[ -z ${WAYLAND_DISPLAY:-} || ! -d $OMARCHY_SOURCE/shell/Commons ]] || ! command -v quickshell >/dev/null; then
+  [[ ${GROUPS_NATIVE_TEST:-0} != 1 ]] \
+    || fail "the native test needs a Wayland session, quickshell and the Omarchy shell source"
   echo "qml.test.sh: no omarchy session, skipping the runtime harness" >&2
   exit 0
 fi
