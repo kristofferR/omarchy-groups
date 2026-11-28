@@ -1,5 +1,16 @@
 # Changelog
 
+## 2.0.0
+
+Groups now requires Omarchy 4.5 or newer and follows the bar's new way of dragging widgets.
+
+- Show the drag preview again when a widget is dragged out of a group, open the bar's own gap where it will land, and let it land in any bar section.
+- Drop a bar widget on a group without the bar first opening a gap beside it or arming its remove-on-pull over a drawer.
+- Let the bar reorder group icons itself, and keep a group that still holds widgets from being removed by a pull off the bar.
+- Recognize every bar section, including the two beside the center and the tray's drawer, in settings and when moving widgets.
+- Place drawers below the bar's real thickness on screens with a camera notch.
+- Remove the compatibility adapter for bars older than Omarchy 4.5.
+
 ## 1.1.1
 
 - Keep icon selection and settings navigation working without a focus error.
