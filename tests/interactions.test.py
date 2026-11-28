@@ -119,12 +119,12 @@ def main():
         wait(lambda: state(DEST)['dragFeedback']['imageReady'], 'drag image captured')
         feedback = state(DEST)['dragFeedback']
         assert abs(feedback['x'] - middle[0]) <= 1 and abs(feedback['y'] - middle[1]) <= 1
-        assert feedback['marker'] is None, 'no bar insertion marker over the drawer'
+        assert feedback['room'] is None, 'the bar opens no room while the drag is over the drawer'
         mouse.glide(middle, end)
         feedback = state(DEST)['dragFeedback']
         assert abs(feedback['x'] - end[0]) <= 1 and abs(feedback['y'] - end[1]) <= 1
-        marker = feedback['marker']
-        assert marker and abs(marker['x'] + marker['width']/2 - clock['x']) <= 1
+        room = feedback['room']
+        assert room and room['section'] == clock_section, 'the bar opens room in the clock\'s section'
         capture = os.environ.get('NOOK_DRAG_CAPTURE')
         if capture:
             d.sh('grim', '-g', f'{end[0]-100},0 240x90', capture)
@@ -132,7 +132,10 @@ def main():
         wait(lambda: PROBE not in ids(DEST), 'group to exact bar slot')
         section = config()['bar']['layout'][clock_section]
         probe_index = next(i for i,e in enumerate(section) if e['id'] == PROBE)
-        assert section[probe_index+1]['id'] == 'omarchy.clock', 'drop must land before clock'
+        # The bar counts a place back over widgets that draw nothing, so a
+        # hidden one may sit between the probe and the clock.
+        assert probe_index == room['index'], 'drop must land where the bar opened room'
+        assert probe_index < next(i for i,e in enumerate(section) if e['id'] == 'omarchy.clock'), 'drop must land before clock'
         assert section[probe_index] == fixture
         print('group → precise bar slot, settings retained', flush=True)
 

@@ -4,9 +4,11 @@ import Quickshell
 import Quickshell.Io
 import Quickshell.Wayland
 import qs.Commons
+// `Color` alone can resolve to QtQuick's own Color type instead of the theme,
+// so the theme is named through this alias, as the stock shell does.
+import qs.Commons as Commons
 import qs.Ui
 import "LayoutModel.js" as Layout
-import "BarCompatibility.js" as BarCompatibility
 import "GroupIcons.js" as GroupIcons
 
 // Hosts other bar widgets behind a chevron, in a strip that opens off the bar.
@@ -50,17 +52,6 @@ BarWidget {
     if (host) resolvedHost = host
   }
   onBarChanged: connectHost()
-  onHostBarChanged: if (barCompatibility) barCompatibility.restart()
-  Timer {
-    id: barCompatibility
-    interval: 0
-    onTriggered: BarCompatibility.ensure(root.hostBar)
-  }
-  Connections {
-    target: root.hostBar
-    ignoreUnknownSignals: true
-    function onModuleSlotsChanged() { if (barCompatibility) barCompatibility.restart() }
-  }
   Timer {
     interval: 200
     repeat: true
@@ -107,8 +98,8 @@ BarWidget {
   // A transparent bar picks barForeground to contrast with the wallpaper, not
   // with this card, so the card stays on the theme and hosted widgets are
   // repainted to match it.
-  readonly property color cardBackground: hostBar ? hostBar.background : Color.background
-  readonly property color hostedForeground: hostBar ? hostBar.themeForeground : Color.foreground
+  readonly property color cardBackground: hostBar ? hostBar.background : Commons.Color.background
+  readonly property color hostedForeground: hostBar ? hostBar.themeForeground : Commons.Color.foreground
 
   // The bar owns the rules for what counts as a custom module, so ask it.
   function customTypeOf(entry) {
@@ -158,6 +149,13 @@ BarWidget {
     if (!screen) return 0
     return vertical ? screen.height : screen.width
   }
+  // The bar's strip on a screen. A camera notch can make it thicker there
+  // than barSize, the size the widgets are drawn at.
+  function thicknessOn(screen) {
+    return hostBar && screen && typeof hostBar.barSizeFor === "function"
+      ? hostBar.barSizeFor(screen.name) : barSize
+  }
+  readonly property real barThickness: thicknessOn(barWindow ? barWindow.screen : null)
 
 
   property bool pointerInside: false
@@ -279,7 +277,9 @@ BarWidget {
           imageReady: String(root.hostBar.barDragImageUrl) !== "",
           x: root.hostBar.barDragScreenX, y: root.hostBar.barDragScreenY,
           offsetX: root.hostBar.barDragOffsetX, offsetY: root.hostBar.barDragOffsetY,
-          marker: root.hostBar.barDragTargetGeometry
+          extent: root.hostBar.barDragExtent,
+          // Where the bar has opened room for the drop, or null off the bar.
+          room: root.childDropBar
         } : null,
         groupId: root.groupId,
         label: root.groupLabel,
@@ -324,10 +324,7 @@ BarWidget {
     // Let the Row/Column position binding settle before mapping its children.
     if (draggingChild) updateChildDrag(childDragScenePoint)
     else if (incomingGroup) incomingGroup.updateChildDrag(incomingGroup.childDragScenePoint)
-    else if (dropOnCard && hostBar) {
-      armedIndex = insertionIndexAt(vertical ? hostBar.barDragSceneY : hostBar.barDragSceneX)
-      caretIndex = armedIndex
-    }
+    else armInsertion()
   }
 
   onMaxScrollChanged: scrollOffset = Math.max(0, Math.min(scrollOffset, maxScroll))
@@ -407,14 +404,15 @@ BarWidget {
     return entries.length
   }
 
-  // Bar.qml commits its own reorder and knows nothing about drawers, so a drop
-  // here would only park the entry beside the chevron.
+  // A widget dragged off the bar. The bar tracks the pointer and draws the
+  // ghost; a group reads where the drag is and takes the drop. A group dragged
+  // by its own icon is the bar's to reorder.
 
   readonly property bool dragActive: !isManager && hostBar && hostBar.barDragSource !== null
     && hostBar.barDragSource.moduleName !== moduleName && !anyGroupDragging
   // Without this both monitors' drawers would light up.
-  readonly property bool dragInThisWindow: dragActive && hostBar.barDragWindow
-    && barWindow === hostBar.barDragWindow
+  readonly property bool dragInThisWindow: dragActive
+    && hostBar.sameWindow(hostBar.barDragWindow, barWindow)
   readonly property point dragPoint: dragInThisWindow
     ? root.mapFromItem(null, hostBar.barDragSceneX, hostBar.barDragSceneY) : Qt.point(-1, -1)
   readonly property bool dropOnChevron: dragInThisWindow
@@ -429,7 +427,6 @@ BarWidget {
     if (!barWindow) return false
     var along = vertical ? sceneY : sceneX
     var across = vertical ? sceneX : sceneY
-    var barThickness = vertical ? barWindow.width : barWindow.height
     var pastBar = barPosition === "top" || barPosition === "left"
       ? across >= barThickness && across <= barThickness + stripThickness
       : across <= 0 && across >= -stripThickness
@@ -443,18 +440,24 @@ BarWidget {
     if (!hostBar) return
     if (dropHovered) {
       armedChoice = dragSourceId() ? choiceForSlot(hostBar.barDragSource) : null
+      armInsertion()
+      holdNativeDrag()
     } else if (hostBar.barDragSource) {
       armedChoice = null
       armedIndex = -1
       caretIndex = -1
     }
   }
+  onDragPointChanged: armInsertion()
+  onDropOnCardChanged: armInsertion()
 
-  // Over the card the pointer has left the bar window, so `barDragTarget` never
-  // changes and the handler watching it never fires.
-  onDragPointChanged: {
-    if (!dropOnCard || !hostBar) return
-    armedIndex = insertionIndexAt(vertical ? hostBar.barDragSceneY : hostBar.barDragSceneX)
+  // Where a drop would go in the strip. Over the chevron it appends. Not once
+  // the bar has let go: its drag state unwinds one property at a time, and the
+  // drop is still to be read from here.
+  function armInsertion() {
+    if (!dropHovered || !hostBar || !hostBar.barDragSource) return
+    armedIndex = dropOnCard
+      ? insertionIndexAt(vertical ? hostBar.barDragSceneY : hostBar.barDragSceneX) : -1
     caretIndex = armedIndex
   }
 
@@ -466,88 +469,36 @@ BarWidget {
     return id
   }
 
-  property var savedBarDropSlot: null
-  property bool savedBarDropAfter: false
-
-  // The native bar clears its drag source on both release and cancellation.
-  // Listen to its pointer instead so only a real release commits our reorder.
-  readonly property var barDragPointer: {
-    var children = ownSlot ? ownSlot.children : []
-    for (var i = 0; i < children.length; i++) {
-      if (children[i] instanceof MouseArea && "dragging" in children[i]) return children[i]
-    }
-    return null
+  // The bar knows nothing of drawers. Over a group it would open room beside
+  // the chevron, and past the bar it arms removal, so letting go would move or
+  // delete the widget as well as dropping it here. While this group takes the
+  // drop, send the room back where the widget came from and disarm the bar.
+  // A stray pull does not remove a group that still holds widgets either.
+  function holdNativeDrag() {
+    var source = hostBar ? hostBar.barDragSource : null
+    if (!source) return
+    if (!dropHovered && !(source === ownSlot && entries.length > 0)) return
+    if (hostBar.barDragRemoveArmed) hostBar.barDragRemoveArmed = false
+    if (!dropHovered) return
+    if (hostBar.barDragTarget) hostBar.barDragTarget = null
+    if (hostBar.barDragRoom && !hostBar.barDragRoom.home) hostBar.moveDragRoom(null)
   }
 
-  function clearBarDrop() {
-    savedBarDropSlot = null
-    savedBarDropAfter = false
-  }
-
-  Connections {
-    target: root.barDragPointer
-    function onPressed() { root.clearBarDrop() }
-    function onCanceled() { root.clearBarDrop() }
-    function onReleased() {
-      var slot = root.savedBarDropSlot
-      var after = root.savedBarDropAfter
-      root.clearBarDrop()
-      if (slot) root.moveGroupToBarSlot(slot, after)
-    }
-  }
-
-  function moveGroupToBarSlot(destSlot, destAfter) {
-    if (!destSlot || !destSlot.region) return
-    var toSection = destSlot.region
-    var toIndex = -1
-    if (destSlot.entry && destSlot.entry.groupId) {
-      var layout = shellConfig && shellConfig.bar ? shellConfig.bar.layout : null
-      var found = Layout.findDrawerEntry(layout, root.moduleName, destSlot.entry.groupId)
-      if (found) toIndex = found.index
-    } else {
-      toIndex = slotLayoutIndex(destSlot)
-    }
-    if (toIndex < 0) return
-    toIndex = toIndex + (destAfter ? 1 : 0)
-    mutate(function(config) {
-      Layout.moveGroupOnBar(config, root.moduleName, root.groupId, toSection, toIndex)
-    })
+  function landNativeDrag() {
+    if (hostBar && hostBar.barSettle && armedChoice) hostBar.finishBarSettle()
   }
 
   Connections {
     target: root.hostBar
 
-    // Null the bar's target so its release is a no-op. ModuleSlot.onReleased reads
-    // it into a local before clearBarDrag(), and the bar's write is synchronous:
-    // it reassigns layoutConfig and may destroy this source widget. Watch the
-    // target rather than the pointer because Bar.qml sets
-    // barDragSceneX first and the target a few lines later.
-    function onBarDragTargetChanged() {
-      if (root.hostBar && root.barDragPointer && root.hostBar.barDragSource === root.ownSlot) {
-        if (root.hostBar.barDragTarget === null) return
-        var scenePt = Qt.point(root.hostBar.barDragSceneX, root.hostBar.barDragSceneY)
-        var drop = root.hostBar.moduleDropAtScene(scenePt, root.ownSlot)
-        if (drop && drop.slot) {
-          root.savedBarDropSlot = drop.slot
-          root.savedBarDropAfter = drop.after
-        }
-        root.hostBar.barDragTarget = null
-        return
-      }
-      if (!root.dropHovered || !root.hostBar || root.hostBar.barDragTarget === null) return
-      root.armedIndex = root.dropOnCard
-        ? root.insertionIndexAt(root.vertical ? root.hostBar.barDragSceneY : root.hostBar.barDragSceneX)
-        : -1
-      root.caretIndex = root.armedIndex
-      root.hostBar.barDragTarget = null            // re-enters, and returns at the null check
-    }
+    function onBarDragRoomChanged() { root.holdNativeDrag() }
+    function onBarDragRemoveArmedChanged() { root.holdNativeDrag() }
 
-    function onBarDragTargetGeometryChanged() {
-      if (root.hostBar && root.hostBar.barDragSource === root.ownSlot) {
-        if (root.hostBar.barDragTargetGeometry === null) {
-          root.clearBarDrop()
-        }
-      }
+    // Let go over this group, the ghost would first glide back to where the
+    // widget was. Land it at once. Later, since the bar is still starting
+    // that glide.
+    function onBarSettleChanged() {
+      if (root.hostBar.barSettle && root.armedChoice) Qt.callLater(root.landNativeDrag)
     }
 
     // Release and cancel look identical here, so an abandoned drag lands.
@@ -594,44 +545,27 @@ BarWidget {
       var along = vertical ? point.y : point.x
       var across = vertical ? point.x : point.y
       var onButton = along >= peer.chevronAlong && along <= peer.chevronAlong + peer.chevronExtent
-        && across >= 0 && across <= barSize
+        && across >= 0 && across <= barThickness
       if (onButton || (peer.expanded && peer.withinCard(point.x, point.y))) return peer
     }
     return null
   }
 
-  // The bar normalizes the tray position and splits the center into separate
-  // rows. Resolve a visible slot back to the saved entry by ID occurrence.
+  // Where a bar slot's entry sits among its section's raw entries. The bar
+  // keys every widget it draws, which tells repeated ids apart.
   function slotLayoutIndex(slot) {
-    if (!slot || !hostBar || !shellConfig || !shellConfig.bar) return -1
-    var candidates = hostBar.moduleSlots.filter(function(peer) {
-      return peer && peer.region === slot.region && peer.moduleName === slot.moduleName
-        && hostBar.slotWindow(peer) === barWindow
-    })
-    candidates.sort(function(a, b) {
-      var pa = a.mapToItem(null, 0, 0)
-      var pb = b.mapToItem(null, 0, 0)
-      return vertical ? pa.y - pb.y : pa.x - pb.x
-    })
-    var occurrence = candidates.indexOf(slot)
-    if (occurrence < 0) return -1
-    var entries = shellConfig.bar.layout[slot.region] || []
-    for (var i = 0; i < entries.length; i++) {
-      if (Layout.entryIdOf(entries[i]) !== slot.moduleName) continue
-      if (occurrence-- === 0) return i
-    }
-    return -1
+    if (!slot || !hostBar || !hostBar.layoutWidgets || !shellConfig || !shellConfig.bar) return -1
+    var keys = hostBar.layoutWidgets.sections[slot.region] || []
+    return Layout.rawIndex(shellConfig.bar.layout[slot.region], keys.indexOf(slot.widgetKey))
   }
 
-  function barDestinationAt(point) {
-    if (!hostBar || !barWindow) return null
-    // Use the native hit testing, with the bar window as the coordinate space.
-    // Passing the hosted proxy would instead restrict the search to its drawer.
-    var drop = hostBar.moduleDropAtScene(point, null)
-    if (!drop) return null
-    var index = slotLayoutIndex(drop.slot)
-    return index < 0 ? null : {section: drop.slot.region,
-      index: index + (drop.after ? 1 : 0), slot: drop.slot, after: drop.after}
+  // Where the room the bar has open for the drag sits among its section's raw
+  // entries, or null while the bar has none open.
+  function barDestination() {
+    var room = hostBar ? hostBar.barDragRoom : null
+    if (!room || room.home || !shellConfig || !shellConfig.bar) return null
+    var index = Layout.rawIndex(shellConfig.bar.layout[room.region] || [], room.index)
+    return index < 0 ? null : {section: room.region, index: index}
   }
 
   // Capture the exact saved occurrence before a drag. The snapshot also
@@ -653,24 +587,31 @@ BarWidget {
   readonly property bool draggingChild: draggingIndex >= 0
 
   function beginChildDrag(cell, pressPoint) {
-    if (!cell || !barWindow || !hostBar || typeof hostBar.captureBarDragGhost !== "function"
-        || typeof hostBar.moduleDropAtScene !== "function") return
+    if (!cell || !barWindow || !hostBar || typeof hostBar.moveDragRoom !== "function") return
+    // As Bar.beginBarDrag does: a widget still landing or poofing away is
+    // written out first, so the drag starts from the layout as it will be.
+    hostBar.finishBarSettle()
+    hostBar.commitBarRemoval()
     childDragChoice = choiceForSlot(cell.nativeDragSlot, cell.index)
     if (!childDragChoice) return
     draggingIndex = cell.index
     childDragSlot = cell.nativeDragSlot
     caretIndex = -1
     draggingOutside = false
-    // Share the stock bar's overlay ghost and insertion marker. Keep the real
-    // widget in its drawer so its pointer grab and native actions stay intact.
+    // Share the stock bar's overlay ghost, and the room it opens where a drop
+    // would land. Keep the real widget in its drawer so its pointer grab and
+    // native actions stay intact. This is Bar.beginBarDrag for a widget that
+    // has no slot on the bar: the bar window stays the coordinate space.
     hostBar.clearBarDrag()
     hostBar.clearTooltip()
     hostBar.barDragWindow = barWindow
     hostBar.barDragScreen = barWindow.screen
     hostBar.barDragOffsetX = pressPoint.x
     hostBar.barDragOffsetY = pressPoint.y
-    hostBar.barDragSource = childDragSlot
     hostBar.captureBarDragGhost(childDragSlot)
+    hostBar.barDragExtent = Math.ceil(vertical ? childDragSlot.widgetHeight : childDragSlot.widgetWidth)
+    hostBar.startDragRoom(childDragSlot)
+    hostBar.barDragSource = childDragSlot
   }
 
   // The card's edge is flush against the bar, so testing the card's rectangle
@@ -697,7 +638,6 @@ BarWidget {
     childDropGroup = groupAtPoint(childDragPoint)
     if (previous && previous !== childDropGroup) previous.caretIndex = -1
     draggingOutside = draggedOntoBar(scenePoint)
-    childDropBar = !childDropGroup && draggingOutside ? barDestinationAt(childDragPoint) : null
     if (childDropGroup) {
       childDropGroup.caretIndex = childDropGroup.withinCard(childDragPoint.x, childDragPoint.y)
         ? childDropGroup.insertionIndexAt(vertical ? childDragPoint.y : childDragPoint.x) : -1
@@ -713,16 +653,22 @@ BarWidget {
     hostBar.barDragSceneY = childDragPoint.y
     hostBar.barDragScreenX = screenPoint.x
     hostBar.barDragScreenY = screenPoint.y
-    hostBar.barDragTarget = childDropBar ? childDropBar.slot : null
-    hostBar.barDragAfter = childDropBar ? childDropBar.after : false
-    hostBar.barDragTargetGeometry = childDropBar
-      ? hostBar.dropMarkerRect(childDropBar.slot, childDropBar.after) : null
+    // Over the bar, the bar opens room where the widget would land, and the
+    // drop goes where that room is. The bar window is the coordinate space;
+    // naming the hosted proxy as the source would search its drawer instead.
+    var drop = !childDropGroup && draggingOutside ? hostBar.moduleDropAtScene(childDragPoint, null) : null
+    hostBar.barDragTarget = drop
+    hostBar.moveDragRoom(drop)
+    childDropBar = drop ? barDestination() : null
   }
 
   function endChildDrag() {
     var caret = caretIndex
     var target = childDropGroup
-    var destination = childDropBar
+    // The bar lets go of a drag when a layout written from elsewhere moves its
+    // widgets about. The place it had open for this one no longer holds then.
+    var destination = hostBar && JSON.stringify(hostBar.layoutWidgets.sections) === hostBar.barDragKeys
+      ? childDropBar : null
     var targetIndex = target ? target.caretIndex : -1
     var choice = childDragChoice
     var targetId = target ? target.groupId : ""
@@ -784,7 +730,7 @@ BarWidget {
   function entryOnBar(id) {
     var layout = hostBar && hostBar.layoutConfig ? hostBar.layoutConfig : null
     if (!layout) return null
-    var sections = ["left", "center", "right"]
+    var sections = Layout.SECTIONS
     for (var s = 0; s < sections.length; s++) {
       var list = layout[sections[s]]
       if (!list) continue
@@ -902,8 +848,8 @@ BarWidget {
       id: groupTitleBubble
       implicitWidth: groupTitleLabel.implicitWidth + 20
       implicitHeight: groupTitleLabel.implicitHeight + 14
-      color: Color.tooltip.background
-      borderSpec: Border.surfaceSpec("tooltip", "border", Color.tooltip.border, 1)
+      color: Commons.Color.tooltip.background
+      borderSpec: Border.surfaceSpec("tooltip", "border", Commons.Color.tooltip.border, 1)
       radius: Style.cornerRadius
 
       Text {
@@ -911,7 +857,7 @@ BarWidget {
         anchors.centerIn: parent
         textFormat: Text.PlainText
         text: root.groupLabel + " · " + root.entries.length + " plugins"
-        color: Color.tooltip.text
+        color: Commons.Color.tooltip.text
         font.family: root.hostBar ? root.hostBar.fontFamily : Style.font.family
         font.pixelSize: Style.font.body
       }
@@ -947,7 +893,7 @@ BarWidget {
       z: -1
     }
     active: root.dropHovered || root.expanded
-    activeColor: Color.accent          // `active` defaults to bar.urgent, kept for urgency
+    activeColor: Commons.Color.accent          // `active` defaults to bar.urgent, kept for urgency
     tooltipText: root.isManager ? "Groups settings" : root.entries.length === 0 ? "Add widgets to " + root.groupLabel : root.trigger === "hover" || root.expanded
       ? "" : root.groupLabel + " · " + root.entries.length + " plugins"
     // Tests `latched`, not `expanded`: hovering already makes it expanded, so
@@ -999,15 +945,15 @@ BarWidget {
       id: childTooltipBubble
       implicitWidth: childTooltipLabel.implicitWidth + 20
       implicitHeight: childTooltipLabel.implicitHeight + 14
-      color: Color.tooltip.background
-      borderSpec: Border.surfaceSpec("tooltip", "border", Color.tooltip.border, 1)
+      color: Commons.Color.tooltip.background
+      borderSpec: Border.surfaceSpec("tooltip", "border", Commons.Color.tooltip.border, 1)
       radius: Style.cornerRadius
       Text {
         id: childTooltipLabel
         anchors.centerIn: parent
         textFormat: Text.PlainText
         text: root.hostBar ? root.hostBar.tooltipText : ""
-        color: Color.tooltip.text
+        color: Commons.Color.tooltip.text
         font.family: root.hostBar ? root.hostBar.fontFamily : Style.font.family
         font.pixelSize: Style.font.body
       }
@@ -1029,6 +975,8 @@ BarWidget {
         required property var modelData
         readonly property bool ownScreen: root.barWindow && root.barWindow.screen
           && modelData.name === root.barWindow.screen.name
+        // This screen's bar, which a notch can make thicker than the next one's.
+        readonly property real screenBarThickness: root.thicknessOn(modelData)
         screen: modelData
         visible: root.dismissActive
         color: "transparent"
@@ -1042,17 +990,17 @@ BarWidget {
           height: modelData.height
           Region {
             intersection: Intersection.Subtract
-            x: root.barPosition === "right" ? modelData.width - root.barSize : 0
-            y: root.barPosition === "bottom" ? modelData.height - root.barSize : 0
-            width: root.vertical ? root.barSize : modelData.width
-            height: root.vertical ? modelData.height : root.barSize
+            x: root.barPosition === "right" ? modelData.width - screenBarThickness : 0
+            y: root.barPosition === "bottom" ? modelData.height - screenBarThickness : 0
+            width: root.vertical ? screenBarThickness : modelData.width
+            height: root.vertical ? modelData.height : screenBarThickness
           }
           Region {
             intersection: Intersection.Subtract
             x: ownScreen ? (root.vertical ? (root.barPosition === "right"
-              ? modelData.width - root.barSize - root.stripThickness : root.barSize) : root.cardAlong) : 0
+              ? modelData.width - screenBarThickness - root.stripThickness : screenBarThickness) : root.cardAlong) : 0
             y: ownScreen ? (root.vertical ? root.cardAlong : (root.barPosition === "bottom"
-              ? modelData.height - root.barSize - root.stripThickness : root.barSize)) : 0
+              ? modelData.height - screenBarThickness - root.stripThickness : screenBarThickness)) : 0
             width: ownScreen ? cardArea.width : 0
             height: ownScreen ? cardArea.height : 0
           }
@@ -1100,8 +1048,8 @@ BarWidget {
       right: root.barPosition === "right" || !root.vertical
     }
 
-    implicitWidth: root.vertical ? root.barSize + root.stripThickness : 0
-    implicitHeight: root.vertical ? 0 : root.barSize + root.stripThickness
+    implicitWidth: root.vertical ? root.barThickness + root.stripThickness : 0
+    implicitHeight: root.vertical ? 0 : root.barThickness + root.stripThickness
 
     // Only the card takes input, or the stretch over the bar would swallow its
     // clicks. Spelled out rather than `Region { item: cardArea }`: the item form
@@ -1119,7 +1067,7 @@ BarWidget {
       id: cardArea
 
       readonly property real acrossOffset: root.barPosition === "top" || root.barPosition === "left"
-        ? root.barSize : 0
+        ? root.barThickness : 0
 
       x: root.vertical ? acrossOffset : root.cardAlong
       y: root.vertical ? root.cardAlong : acrossOffset
@@ -1170,8 +1118,8 @@ BarWidget {
       BorderSurface {
         anchors.fill: parent
         color: root.cardBackground
-        borderSpec: Border.localOrSurfaceSpec("popups", "border", Color.popups.border,
-          Color.popups.border, Math.max(1, Style.space(2)))
+        borderSpec: Border.localOrSurfaceSpec("popups", "border", Commons.Color.popups.border,
+          Commons.Color.popups.border, Math.max(1, Style.space(2)))
         radius: Style.cornerRadius
       }
 
@@ -1230,7 +1178,7 @@ BarWidget {
 
           visible: opacity > 0
           opacity: root.caretIndex >= 0 && anchorCell ? 0.9 : 0
-          color: Color.accent
+          color: Commons.Color.accent
           radius: Math.min(width, height) / 2
           width: root.vertical ? (anchorCell ? anchorCell.width : 0) : Style.spacing.xs
           height: root.vertical ? Style.spacing.xs : (anchorCell ? anchorCell.height : 0)
@@ -1445,7 +1393,7 @@ BarWidget {
       text: ""
       font.family: cell.host ? cell.host.fontFamily : Style.font.family
       font.pixelSize: Style.font.body
-      color: cell.host ? cell.host.barForeground : Color.foreground
+      color: cell.host ? cell.host.barForeground : Commons.Color.foreground
       opacity: 0.4
     }
 
@@ -1471,6 +1419,12 @@ BarWidget {
       readonly property bool dragSource: cell.dragSource
       readonly property bool panelOpen: cell.childOpen
       readonly property real panelIndicatorExtent: 0
+      // What the bar reads off a slot it drags: a key no bar section holds,
+      // and the size of the ghost and of the room it opens.
+      readonly property string widgetKey: "drawer:" + root.groupId + ":" + cell.index
+      readonly property real widgetWidth: cell.width
+      readonly property real widgetHeight: cell.height
+      readonly property bool hostsTraySection: false
 
       property var registeredWith: null
 
@@ -1503,7 +1457,7 @@ BarWidget {
 
       visible: opacity > 0
       opacity: cell.childOpen && !cell.dragSource ? 0.9 : 0
-      color: Color.accent
+      color: Commons.Color.accent
       radius: Math.min(width, height) / 2
       width: alongBar ? Math.max(Style.space(10), Math.round(cell.width * 0.55)) : Style.space(2)
       height: alongBar ? Style.space(2) : Math.max(Style.space(10), Math.round(cell.height * 0.55))

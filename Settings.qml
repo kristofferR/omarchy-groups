@@ -4,6 +4,9 @@ import Quickshell
 import Quickshell.Io
 import Quickshell.Wayland
 import qs.Commons
+// `Color` alone can resolve to QtQuick's own Color type instead of the theme,
+// so the theme is named through this alias, as the stock shell does.
+import qs.Commons as Commons
 import qs.Ui
 import "GroupIcons.js" as GroupIcons
 import "LayoutModel.js" as Layout
@@ -212,7 +215,7 @@ Item {
   }
 
   component Label: Text {
-    color: Color.menu.text
+    color: Commons.Color.menu.text
     font.family: Style.font.menuFamily
     font.pixelSize: Style.font.body
     textFormat: Text.PlainText
@@ -234,7 +237,7 @@ Item {
     Image {
       anchors.centerIn: parent
       width: Style.space(24); height: width
-      source: GroupIcons.source(iconName, String(Color.menu.text))
+      source: GroupIcons.source(iconName, String(Commons.Color.menu.text))
       sourceSize.width: width * (window.screen ? window.screen.devicePixelRatio : 1)
       sourceSize.height: height * (window.screen ? window.screen.devicePixelRatio : 1)
     }
@@ -250,7 +253,7 @@ Item {
     WlrLayershell.namespace: "omarchy-groups-settings"
     WlrLayershell.layer: WlrLayer.Overlay
     WlrLayershell.keyboardFocus: root.opened ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
-    Rectangle { anchors.fill: parent; color: Color.menu.scrim }
+    Rectangle { anchors.fill: parent; color: Commons.Color.menu.scrim }
     MouseArea { anchors.fill: parent; onClicked: root.close() }
 
     BorderSurface {
@@ -258,9 +261,9 @@ Item {
       anchors.centerIn: parent
       width: Math.min(Style.space(780), window.width - Style.gapsOut * 2)
       height: Math.min(Style.space(680), window.height - Style.gapsOut * 2)
-      color: Color.menu.background
+      color: Commons.Color.menu.background
       radius: Style.cornerRadius
-      borderSpec: Border.surfaceSpec("menu", "border", Color.menu.border, Math.max(1, Style.space(2)))
+      borderSpec: Border.surfaceSpec("menu", "border", Commons.Color.menu.border, Math.max(1, Style.space(2)))
       MouseArea { anchors.fill: parent }
       Column {
         id: content
@@ -274,7 +277,7 @@ Item {
           spacing: Style.space(12)
           Image {
             width: Style.space(36); height: width
-            source: GroupIcons.source("manager", String(Color.accent))
+            source: GroupIcons.source("manager", String(Commons.Color.accent))
             sourceSize.width: width * (window.screen ? window.screen.devicePixelRatio : 1)
             sourceSize.height: height * (window.screen ? window.screen.devicePixelRatio : 1)
           }
@@ -311,13 +314,13 @@ Item {
                     width: groupList.width
                     height: Style.space(54)
                     radius: Style.cornerRadius
-                    color: Qt.alpha(Color.menu.text, root.hasSelection && root.selectedId === modelData.id ? 0.14 : (hover.hovered ? 0.08 : 0.04))
+                    color: Qt.alpha(Commons.Color.menu.text, root.hasSelection && root.selectedId === modelData.id ? 0.14 : (hover.hovered ? 0.08 : 0.04))
                     Image {
                       id: groupIcon
                       anchors.left: parent.left; anchors.leftMargin: Style.space(10)
                       anchors.verticalCenter: parent.verticalCenter
                       width: Style.space(20); height: width
-                      source: GroupIcons.source(modelData.icon, String(Color.menu.text))
+                      source: GroupIcons.source(modelData.icon, String(Commons.Color.menu.text))
                       sourceSize.width: width * (window.screen ? window.screen.devicePixelRatio : 1)
                       sourceSize.height: height * (window.screen ? window.screen.devicePixelRatio : 1)
                     }
@@ -326,11 +329,11 @@ Item {
                       anchors.right: parent.right; anchors.rightMargin: Style.space(10)
                       anchors.verticalCenter: parent.verticalCenter
                       Label { width: parent.width; text: modelData.name; elide: Text.ElideRight }
-                      Label { text: modelData.section + " · " + modelData.count + " icons"; font.pixelSize: Style.font.caption; opacity: 0.6 }
+                      Label { text: Layout.sectionLabel(modelData.section) + " · " + modelData.count + " icons"; font.pixelSize: Style.font.caption; opacity: 0.6 }
                     }
                     activeFocusOnTab: true
                     border.width: activeFocus ? 1 : 0
-                    border.color: Color.accent
+                    border.color: Commons.Color.accent
                     Accessible.role: Accessible.Button
                     Accessible.name: modelData.name
                     Keys.onReturnPressed: root.selectGroup(modelData)
@@ -346,7 +349,7 @@ Item {
               id: shortcutToggle
               width: parent.width
               label: "Settings button on bar"
-              foreground: Color.menu.text
+              foreground: Commons.Color.menu.text
               checked: root.settingsShortcut
               enabled: root.groups.length > 0
               onClicked: root.setShortcut(!checked)
@@ -376,7 +379,7 @@ Item {
                 spacing: Style.space(16)
                 visible: !root.editingWidgets
                 Label { text: "Name"; opacity: 0.7 }
-                TextField { id: nameField; objectName: "groupName"; width: parent.width; maximumLength: 80; placeholderText: "Group name"; foreground: Color.menu.text; onAccepted: root.saveGroup() }
+                TextField { id: nameField; objectName: "groupName"; width: parent.width; maximumLength: 80; placeholderText: "Group name"; foreground: Commons.Color.menu.text; onAccepted: root.saveGroup() }
                 Label { text: "Icon"; opacity: 0.7 }
                 Button {
                   width: parent.width
@@ -396,7 +399,7 @@ Item {
                     anchors.leftMargin: Style.space(14)
                     anchors.verticalCenter: parent.verticalCenter
                     width: Style.space(22); height: width
-                    source: GroupIcons.source(root.chosenIcon, String(Color.menu.text))
+                    source: GroupIcons.source(root.chosenIcon, String(Commons.Color.menu.text))
                     sourceSize.width: width * (window.screen ? window.screen.devicePixelRatio : 1)
                     sourceSize.height: height * (window.screen ? window.screen.devicePixelRatio : 1)
                   }
@@ -404,17 +407,24 @@ Item {
                 Row {
                   width: parent.width
                   spacing: Style.space(12)
-                  Dropdown { id: positionPicker; width: (parent.width - parent.spacing) / 2; label: "Position"; options: ["left", "center", "right"] }
+                  Dropdown {
+                    id: positionPicker
+                    width: (parent.width - parent.spacing) / 2
+                    label: "Position"
+                    // Every section on the bar itself. The tray's drawer is a drawer already.
+                    options: Layout.SECTIONS.filter(function(section) { return section !== "tray" })
+                      .map(function(section) { return {value: section, label: Layout.sectionLabel(section)} })
+                  }
                   Dropdown { id: triggerPicker; width: (parent.width - parent.spacing) / 2; label: "Open on"; options: ["hover", "click"] }
                 }
                 Toggle {
                   id: borderToggle
                   width: parent.width
                   label: "Show icon border"
-                  foreground: Color.menu.text
+                  foreground: Commons.Color.menu.text
                   onClicked: checked = !checked
                 }
-                NumberField { id: durationField; label: "Drawer animation (ms)"; from: 0; to: 1000; stepSize: 50; foreground: Color.menu.text; onModified: function(next) { value = next } }
+                NumberField { id: durationField; label: "Drawer animation (ms)"; from: 0; to: 1000; stepSize: 50; foreground: Commons.Color.menu.text; onModified: function(next) { value = next } }
                 Button { objectName: "saveGroup"; text: "Save changes"; bordered: true; selected: true; focusable: true; enabled: nameField.text.trim().length > 0; onClicked: root.saveGroup() }
                 Button { objectName: "removeGroup"; text: "Remove group"; enabled: root.catalogLoaded; bordered: true; focusable: true; onClicked: root.removeGroup() }
                 Label { width: parent.width; text: "Removing a group returns its icons to the bar."; wrapMode: Text.WordWrap; opacity: 0.6; font.pixelSize: Style.font.caption }
@@ -469,7 +479,7 @@ Item {
           Label { anchors.verticalCenter: parent.verticalCenter; text: "Add widgets"; font.pixelSize: Style.font.title; font.bold: true }
         }
         Label { width: parent.width; text: "Choose an installed widget or move one from your bar or another group."; wrapMode: Text.WordWrap; opacity: 0.65 }
-        TextField { id: widgetSearch; objectName: "widgetSearch"; width: parent.width; placeholderText: "Search widgets"; foreground: Color.menu.text }
+        TextField { id: widgetSearch; objectName: "widgetSearch"; width: parent.width; placeholderText: "Search widgets"; foreground: Commons.Color.menu.text }
         Label { width: parent.width; visible: root.message !== ""; text: root.message; wrapMode: Text.WordWrap; font.pixelSize: Style.font.caption }
         Row {
           width: parent.width
@@ -521,7 +531,7 @@ Item {
           id: iconSearch
           width: parent.width
           placeholderText: "Search " + root.iconNames.length + " icons by name or keyword"
-          foreground: Color.menu.text
+          foreground: Commons.Color.menu.text
         }
         Column {
           width: parent.width

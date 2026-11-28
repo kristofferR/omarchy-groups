@@ -10,6 +10,7 @@ ShellRoot {
   property int stage: 0
   property int ticks: 0
   property var retainedCell: null
+  property var heldSlot: null
   readonly property string groupId: "kristofferr.groups"
   readonly property string sourceDir: Quickshell.env("NOOK_SOURCE_DIR")
   Item { id: host }
@@ -60,33 +61,29 @@ ShellRoot {
 
   function group(id) { return bar.moduleWidgets(groupId).find(widget => widget.groupId === id) }
   function check(condition, message) { if (!condition) throw new Error(message) }
-  function groupOrder() { return shell.shellConfig.bar.layout.right.map(entry => entry.groupId).join(",") }
+  function layout() { return shell.shellConfig.bar.layout }
+  function labels(section) { return layout()[section].map(entry => entry.groupId || entry.label).join(",") }
+  function barSlot(label) { return bar.moduleSlots.find(slot => slot.visible && slot.entry && slot.entry.label === label) }
+  function onItem(item, fraction) { return item.mapToItem(null, item.width * fraction, item.height / 2) }
+  function onCard(widget, along) { return Qt.point(along, widget.barThickness + widget.stripThickness / 2) }
 
-  function dragGroup(from, to, after, cancel, outside) {
-    var pointer = from.ownSlot.children.find(child => child instanceof MouseArea && "dragging" in child)
-    check(!!pointer, "native group drag pointer not found")
-    bar.clearBarDrag()
-    pointer.dragging = true
-    bar.barDragWindow = from.barWindow
-    bar.barDragSource = from.ownSlot
-    var point = to.ownSlot.mapToItem(null, to.width * (after ? 0.75 : 0.25), to.height / 2)
+  // What the bar's own pointer does with a held widget on a move and on a
+  // release (modulePointer in Bar.qml's ModuleSlot), without a real pointer.
+  function barDragTo(slot, point) {
+    if (bar.barDragSource !== slot) bar.beginBarDrag(slot, 2, 2)
+    var screenPoint = bar.barDragScreenPoint(point)
     bar.barDragSceneX = point.x
     bar.barDragSceneY = point.y
-    var drop = bar.moduleDropAtScene(point, from.ownSlot)
-    check(drop && drop.slot === to.ownSlot && drop.after === after, "wrong native drop target")
-    bar.barDragTarget = drop.slot
-    bar.barDragAfter = drop.after
-    bar.barDragTargetGeometry = bar.dropMarkerRect(drop.slot, drop.after)
-    if (outside) {
-      bar.barDragSceneY = from.barWindow.height + 500
-      bar.barDragTarget = null
-      bar.barDragTargetGeometry = null
-    }
-    // Exercise the native MouseArea's handlers, including clearBarDrag's signal
-    // order. A group intercepts the target, so release does not consume a mouse.
-    check(bar.barDragTarget === null, "group did not intercept the native reorder")
-    if (cancel) pointer.canceled()
-    else pointer.released(null)
+    bar.barDragScreenX = screenPoint.x
+    bar.barDragScreenY = screenPoint.y
+    var drop = bar.moduleDropAtScene(point, slot)
+    bar.barDragTarget = drop
+    bar.moveDragRoom(drop)
+    bar.setBarDragRemoveArmed(!drop && bar.moduleRemoveDistance(screenPoint) >= bar.barDragRemoveDistance)
+  }
+  function barRelease(slot) {
+    if (bar.barDragSource === slot && bar.barDragRemoveArmed) bar.removeBarDrag(slot)
+    else if (bar.barDragSource === slot) bar.settleBarDrag(slot)
   }
 
   function finish(error) {
@@ -117,7 +114,7 @@ ShellRoot {
     repeat: true
     onTriggered: {
       try {
-        if (++root.ticks > 70) throw new Error("timed out: " + JSON.stringify(bar.debugBarGeometry()))
+        if (++root.ticks > 150) throw new Error("timed out: " + JSON.stringify(bar.debugBarGeometry()))
         var source = root.group("source")
         var target = root.group("target")
         if (!source || !target || !source.hostBar || !target.hostBar) return
@@ -127,9 +124,13 @@ ShellRoot {
           root.retainedCell = source.cells[0]
           root.stage++
         } else if (root.stage === 1) {
+          // Drawer to another group.
           check(source.dismissActive && source.dismissInitialized, "dismissal surface was not initialized")
           source.beginChildDrag(source.cells[1], Qt.point(5, 5))
           check(source.draggingChild && source.childDragChoice.location.itemIndex === 1, "wrong repeated drag source")
+          check(bar.barDragSource === source.cells[1].nativeDragSlot
+            && bar.barDragExtent === Math.ceil(source.cells[1].width) && bar.barDragGhostHeight > 0,
+            "drawer drag gave the bar's ghost no size")
           source.childDropGroup = target
           target.caretIndex = 0
           source.endChildDrag()
@@ -142,46 +143,121 @@ ShellRoot {
           target.open()
           root.stage++
         } else if (root.stage === 3) {
+          // Drawer to the bar: the bar opens room where the drop would land.
+          if (!target.revealed || !target.cells[0].childItem) return
           target.beginChildDrag(target.cells[0], Qt.point(5, 5))
           check(target.draggingChild, "eject drag did not start")
-          target.childDropBar = {section: "left", index: 1}
-          target.endChildDrag()
+          target.updateChildDrag(onCard(target, target.cardAlong + target.cardExtent / 2))
+          check(target.childDropBar === null && bar.barDragRoom.home, "the bar opened room for a drag still over its drawer")
+          target.updateChildDrag(onItem(barSlot("bar-second"), 0.25))
+          check(target.childDropBar && target.childDropBar.section === "left" && target.childDropBar.index === 1,
+            "drag over the bar missed the insertion place: " + JSON.stringify(target.childDropBar))
           root.stage++
         } else if (root.stage === 4) {
-          check(shell.shellConfig.bar.layout.left[1].label === "drawer-second", "eject missed exact bar position")
+          // The room takes a few frames to open, and the ghost a frame to copy.
+          if (bar.dragSpacers.length !== 1 || String(bar.barDragImageUrl) === "") return
+          check(bar.dragSpacers[0].region === "left" && bar.dragSpacers[0].place === 1, "the bar opened room in the wrong place")
+          target.endChildDrag()
+          check(labels("left") === "bar-first,drawer-second,bar-second", "eject missed exact bar position: " + labels("left"))
           check(shell.shellConfig.plugins.some(entry => entry.id === "test.probe"), "eject disabled remaining hosted instance")
-          var slot = bar.moduleSlots.find(slot => slot.entry && slot.entry.label === "bar-second")
-          check(!!slot, "bar occurrence not found")
-          bar.barDragWindow = source.barWindow
-          bar.barDragSource = slot
-          bar.barDragSceneX = source.chevronAlong + source.width / 2
-          bar.barDragSceneY = source.height / 2
-          check(source.armedChoice && source.armedChoice.location.index === 2, "bar drag selected first matching ID")
-          bar.clearBarDrag()
+          check(bar.barDragSource === null && bar.barDragRoom === null, "eject left the bar's drag running")
+          source.open()
           root.stage++
         } else if (root.stage === 5) {
+          if (!source.revealed) return
+          root.stage++
+        } else if (root.stage === 6) {
+          // A layout written from elsewhere mid-drag moves the bar's widgets
+          // about, and the place it had open is stale: the drop is called off.
+          source.beginChildDrag(source.cells[0], Qt.point(5, 5))
+          source.updateChildDrag(onItem(barSlot("bar-second"), 0.25))
+          check(source.childDropBar !== null, "drag over the bar found no place")
+          shell.mutateShellConfig(function(config) { config.bar.layout.left.unshift({id: "test.probe", label: "elsewhere"}) })
+          source.endChildDrag()
+          check(labels("left") === "elsewhere,bar-first,drawer-second,bar-second" && source.entries.length === 1,
+            "a drop landed at a place the layout had moved on from: " + labels("left"))
+          shell.mutateShellConfig(function(config) { config.bar.layout.left.shift() })
+          source.close()
+          root.stage++
+        } else if (root.stage === 7) {
+          // Bar to a group's icon. The bar would open room beside it instead.
+          root.heldSlot = barSlot("bar-second")
+          if (!root.heldSlot) return
+          barDragTo(root.heldSlot, onItem(source, 0.75))
+          check(source.armedChoice && source.armedChoice.location.index === 2, "bar drag selected the wrong occurrence")
+          check(bar.barDragRoom.home && bar.barDragTarget === null, "the bar kept its own drop beside the group")
+          barRelease(root.heldSlot)
+          root.stage++
+        } else if (root.stage === 8) {
+          if (bar.barDragSource) return
           check(source.entries.length === 2 && source.entries[1].label === "bar-second", "bar absorption moved wrong occurrence")
+          check(labels("left") === "bar-first,drawer-second", "the bar moved the absorbed widget as well: " + labels("left"))
+          source.open()
+          root.stage++
+        } else if (root.stage === 9) {
+          // Bar to the open drawer, at a place among its widgets.
+          root.heldSlot = barSlot("drawer-second")
+          if (!source.revealed || !root.heldSlot) return
+          var first = source.cells[0]
+          barDragTo(root.heldSlot, onCard(source, first.mapToItem(null, 0, 0).x + first.width / 4))
+          check(source.dropOnCard && source.armedIndex === 0, "drag over the drawer missed the insertion place")
+          // Deep bars put the drawer past the bar's removal distance.
+          bar.setBarDragRemoveArmed(true)
+          check(!bar.barDragRemoveArmed, "a drop on the drawer would delete the widget")
+          barDragTo(root.heldSlot, Qt.point(400, 400))
+          check(bar.barDragRemoveArmed && !source.armedChoice, "group disarmed removal away from its drawer")
+          barDragTo(root.heldSlot, onCard(source, first.mapToItem(null, 0, 0).x + first.width / 4))
+          barRelease(root.heldSlot)
+          root.stage++
+        } else if (root.stage === 10) {
+          if (bar.barDragSource) return
+          check(source.entries.map(entry => entry.label).join(",") === "drawer-second,drawer-first,bar-second",
+            "drawer drop missed its place: " + JSON.stringify(source.entries))
+          check(labels("left") === "bar-first", "drawer drop left the widget on the bar")
           source.close()
           check(!source.dismissActive && source.dismissInitialized, "closing discarded dismissal objects")
           root.stage++
-        } else if (root.stage === 6) {
+        } else if (root.stage === 11) {
+          // A group's own icon is the bar's to move. Groups must not move it too.
+          root.heldSlot = target.ownSlot
+          barDragTo(root.heldSlot, onItem(source, 0.25))
+          check(bar.barDragTarget && !bar.barDragRoom.home, "group interfered with its own reorder")
+          barRelease(root.heldSlot)
+          root.stage++
+        } else if (root.stage === 12) {
+          if (bar.barDragSource) return
+          check(labels("right") === "target,source", "native group reorder failed: " + labels("right"))
+          check(source.entries.length === 3, "reorder lost the group's widgets")
+          // A group that still holds widgets survives a pull off the bar.
+          root.heldSlot = source.ownSlot
+          barDragTo(root.heldSlot, Qt.point(400, 400))
+          check(!bar.barDragRemoveArmed, "a pull off the bar would delete a group and its widgets")
+          barRelease(root.heldSlot)
+          root.stage++
+        } else if (root.stage === 13) {
+          if (bar.barDragSource) return
+          check(labels("right") === "target,source" && source.entries.length === 3, "a pull off the bar changed the layout")
+          // An empty one can go, as any widget can.
+          barDragTo(target.ownSlot, Qt.point(400, 400))
+          check(bar.barDragRemoveArmed, "an empty group could not be removed from the bar")
+          bar.clearBarDrag()
           source.open()
           check(source.dismissActive, "reopening did not restore dismissal")
           source.close()
           shell.mutateShellConfig(function(config) {
             var items = []
             for (var i = 0; i < 45; i++) items.push({id: "test.probe", label: "overflow-" + i})
-            config.bar.layout.right[0].items = items
+            config.bar.layout.right[1].items = items
           })
           root.stage++
-        } else if (root.stage === 7) {
+        } else if (root.stage === 14) {
           if (source.cells.length !== 45) return
           source.open()
           root.stage++
-        } else if (root.stage === 8) {
+        } else if (root.stage === 15) {
           check(source.overflowing, "overflow fixture fits on the test display")
           source.beginChildDrag(source.cells[0], Qt.point(5, 5))
-          source.updateChildDrag(Qt.point(source.cardAlong + source.cardExtent / 2, source.barSize + source.stripThickness / 2))
+          source.updateChildDrag(onCard(source, source.cardAlong + source.cardExtent / 2))
           var previous = source.caretIndex
           source.scrollOffset = 128
           Qt.callLater(function() {
@@ -189,30 +265,10 @@ ShellRoot {
               check(source.caretIndex > previous, "scrolling left the stationary drag insertion point stale")
               source.cancelChildDrag()
               source.close()
-              root.stage++
-              ticker.start()
+              finish("")
             } catch (error) { finish(error) }
           })
           ticker.stop()
-        } else if (root.stage === 9) {
-          // The destination connected first; it must not swallow this drop.
-          dragGroup(target, source, false, false, false)
-          root.stage++
-        } else if (root.stage === 10) {
-          check(groupOrder() === "target,source", "destination-first handlers lost the group drop")
-          dragGroup(source, target, false, false, false)
-          root.stage++
-        } else if (root.stage === 11) {
-          check(groupOrder() === "source,target", "source-first handlers lost the group drop")
-          dragGroup(target, source, false, true, false)
-          check(groupOrder() === "source,target", "canceled drag committed a group reorder")
-          dragGroup(target, source, false, false, true)
-          check(groupOrder() === "source,target", "drop outside the bar used a stale destination")
-          dragGroup(source, target, true, false, false)
-          root.stage++
-        } else if (root.stage === 12) {
-          check(groupOrder() === "target,source", "release after cancellation missed the after-target drop")
-          finish("")
         }
       } catch (error) { finish(error) }
     }

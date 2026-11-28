@@ -17,7 +17,7 @@ Organize your Omarchy bar into independent icon groups. Drawers open below the b
 
 ## Requirements
 
-- Omarchy Quattro with the native shell plugin system
+- Omarchy 4.5 or newer
 - The standard Omarchy bar
 - Qt 6.8 or newer, provided by current Omarchy releases
 
@@ -66,9 +66,11 @@ omarchy plugin remove kristofferr.groups --yes
 | Drag within a drawer | Reorder icons |
 | Drag to another group | Transfer the widget and its settings |
 | Drag to a position on the bar | Place the widget there |
-| Drop outside the bar and drawers | Cancel the move |
+| Drop a drawer widget outside the bar and drawers | Cancel the move |
 
-Opening another group closes the previous drawer and its child panel. A widget's own panel keeps its group open while in use. Nested groups are not supported.
+Omarchy removes a bar widget that is pulled well off the bar and let go. That still applies to widgets on the bar and to an empty group, but not over a drawer, and a group that holds widgets stays on the bar.
+
+Opening another group closes the previous drawer and its child panel. A widget's own panel keeps its group open while in use. Nested groups are not supported, and the tray's own drawer section is not shown while the tray sits in a group.
 
 ## Settings
 
@@ -76,7 +78,7 @@ Opening another group closes the previous drawer and its child panel. A widget's
 
 Right-click a group to edit that group in the shared settings panel. Everything needed to organize groups is available here:
 
-- **Group:** edit the name, search for an icon, choose left/center/right placement and hover/click opening, toggle the icon border, and set the drawer animation duration. Zero means instant. Press **Save changes** to apply.
+- **Group:** edit the name, search for an icon, choose its bar section and hover/click opening, toggle the icon border, and set the drawer animation duration. Zero means instant. Press **Save changes** to apply.
 - **Widgets:** add installed widgets, move widgets here from another group or bar section, move them up or down, or return them to the bar. These changes save immediately and preserve widget settings.
 - **Add group:** create another empty group with its own identity.
 - **Remove group:** return the group's widgets to its bar section. Removing the last group leaves a settings button on the bar so you can create groups again.
@@ -115,7 +117,7 @@ Replace `devices` with the group ID reported by `omarchy-shell kristofferr.group
 ./install-local.sh
 ```
 
-Validation runs layout tests, Qt 6 lint, the Quickshell harness, shell syntax checks, and manifest validation when Omarchy is installed. The local installer copies runtime files into the user plugin directory and restarts the shell to clear cached QML components. It does not change the layout.
+Validation runs layout tests, Qt 6 lint, the Quickshell harness, shell syntax checks, and manifest validation when Omarchy is installed. `tests/native.sh` also runs the drag paths against the installed Omarchy bar, in a hidden nested compositor. The local installer copies runtime files into the user plugin directory and restarts the shell to clear cached QML components. It does not change the layout.
 
 See [development notes](docs/development.md) for optional live pointer tests, hosting limitations, and the original base/separator comparison.
 

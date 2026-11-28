@@ -29,7 +29,7 @@ grep -Fq 'target: root.moduleName + (root.groupId ? "." + root.groupId : "")' "$
 # plugin, so only hard errors fail the run.
 if [[ -x $QMLLINT_BIN && -d $OMARCHY_SOURCE/shell/Commons ]]; then
   mkdir -p -- "$TMP/lint/qs"
-  cp -- "$ROOT_DIR/BarWidget.qml" "$ROOT_DIR/LayoutModel.js" "$ROOT_DIR/BarCompatibility.js" "$ROOT_DIR/GroupIcons.js" "$ROOT_DIR/LucideIcons.js" "$ROOT_DIR/LucideKeywords.js" "$ROOT_DIR/Settings.qml" "$TMP/lint/"
+  cp -- "$ROOT_DIR/BarWidget.qml" "$ROOT_DIR/LayoutModel.js" "$ROOT_DIR/GroupIcons.js" "$ROOT_DIR/LucideIcons.js" "$ROOT_DIR/LucideKeywords.js" "$ROOT_DIR/Settings.qml" "$TMP/lint/"
   ln -s -- "$OMARCHY_SOURCE/shell/Commons" "$TMP/lint/qs/Commons"
   ln -s -- "$OMARCHY_SOURCE/shell/Ui" "$TMP/lint/qs/Ui"
   "$QMLLINT_BIN" --signal-handler-parameters disable -I "$TMP/lint" \
@@ -47,6 +47,8 @@ fi
 # needs a Wayland backend, so this leg needs a running session; the window it
 # creates starts invisible and never maps.
 if [[ -z ${WAYLAND_DISPLAY:-} || ! -d $OMARCHY_SOURCE/shell/Commons ]] || ! command -v quickshell >/dev/null; then
+  [[ ${GROUPS_NATIVE_TEST:-0} != 1 ]] \
+    || fail "the native test needs a Wayland session, quickshell and the Omarchy shell source"
   echo "qml.test.sh: no omarchy session, skipping the runtime harness" >&2
   exit 0
 fi
@@ -63,16 +65,6 @@ if ! grep -Fq 'NOOK_TEST_OK' "$TMP/quickshell.log" \
     || grep -Fq 'NOOK_TEST_FAIL' "$TMP/quickshell.log"; then
   sed -n '1,120p' "$TMP/quickshell.log" >&2
   fail "harness did not pass"
-fi
-
-mkdir -p -- "$TMP/compat"
-cp -- "$ROOT_DIR/tests/fixtures/bar-compatibility.qml" "$TMP/compat/shell.qml"
-cp -- "$ROOT_DIR/BarCompatibility.js" "$ROOT_DIR/LayoutModel.js" "$TMP/compat/"
-timeout 10 quickshell -p "$TMP/compat" --no-color >"$TMP/compat.log" 2>&1 || true
-if ! grep -Fq 'GROUPS_COMPAT_OK' "$TMP/compat.log" \
-    || grep -v 'qt\.qpa\.services' "$TMP/compat.log" | grep -Eq 'GROUPS_COMPAT_FAIL|^[[:space:]]*(WARN|ERROR)([[:space:]:]|$)'; then
-  cat "$TMP/compat.log" >&2
-  fail "bar compatibility harness did not pass cleanly"
 fi
 
 echo "qml.test.sh: lint, source checks, and harnesses passed"

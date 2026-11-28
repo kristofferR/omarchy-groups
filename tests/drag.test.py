@@ -122,8 +122,8 @@ def config():
 
 def nook_entry(cfg=None):
     cfg = cfg or config()
-    for section in ("left", "center", "right"):
-        for entry in cfg["bar"]["layout"].get(section, []):
+    for entries in cfg["bar"]["layout"].values():
+        for entry in entries:
             if isinstance(entry, dict) and entry.get("id") == NOOK and entry.get("groupId", "") == GROUP_ID:
                 return entry
     raise AssertionError("Nook is not in the bar layout; this test needs it there")
@@ -138,8 +138,8 @@ def hosted_ids(cfg=None):
 
 def on_bar(widget_id, cfg=None):
     cfg = cfg or config()
-    for section in ("left", "center", "right"):
-        for entry in cfg["bar"]["layout"].get(section, []):
+    for entries in cfg["bar"]["layout"].values():
+        for entry in entries:
             if (entry.get("id") if isinstance(entry, dict) else entry) == widget_id:
                 return True
     return False
